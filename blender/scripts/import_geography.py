@@ -95,9 +95,12 @@ def main():
         mat = bpy.data.materials.new("BoundaryBlue")
         mat.diffuse_color = (0.12, 0.52, 0.95, 1.0)
         mat.use_nodes = True
-        bsdf = mat.node_tree.nodes.get("Principled BSDF")
-        if bsdf:
-            bsdf.inputs["Base Color"].default_value = (0.12, 0.52, 0.95, 1.0)
+        mat.node_tree.nodes.clear()
+        emission = mat.node_tree.nodes.new("ShaderNodeEmission")
+        emission.inputs["Color"].default_value = (0.12, 0.52, 0.95, 1.0)
+        emission.inputs["Strength"].default_value = 1.0
+        output_node = mat.node_tree.nodes.new("ShaderNodeOutputMaterial")
+        mat.node_tree.links.new(emission.outputs[0], output_node.inputs["Surface"])
         curve.materials.append(mat)
         obj["source"] = os.path.basename(opts.geojson)
     xs = [v[0] for v in bounds]; ys = [v[1] for v in bounds]
@@ -126,8 +129,15 @@ def main():
     label.keyframe_insert(data_path="hide_render", frame=60)
 
     scene.world.color=(0.16,0.19,0.22)
+    scene.render.film_transparent = True
     label_mat = bpy.data.materials.new("LabelWhite")
     label_mat.diffuse_color = (1.0, 1.0, 1.0, 1.0)
+    label_mat.use_nodes = True
+    label_mat.node_tree.nodes.clear()
+    emission = label_mat.node_tree.nodes.new("ShaderNodeEmission")
+    emission.inputs["Color"].default_value = (1, 1, 1, 1)
+    output_node = label_mat.node_tree.nodes.new("ShaderNodeOutputMaterial")
+    label_mat.node_tree.links.new(emission.outputs[0], output_node.inputs["Surface"])
     label_curve.materials.append(label_mat)
     scene.view_settings.view_transform = "Standard"
     output = os.path.abspath(opts.output)
