@@ -1,0 +1,154 @@
+{
+  "origin": [
+    -96.82,
+    32.79
+  ],
+  "background": "14222e",
+  "credit": "Synthetic geography | demonstration only",
+  "layers": [
+    {
+      "id": "Boundary",
+      "kind": "boundary",
+      "file": "illustrative-story.geojson",
+      "select": [
+        "area"
+      ],
+      "color": "6bdbc5",
+      "width": 4,
+      "fill": 0.25,
+      "outside_dim": 0.4,
+      "trace": 22
+    },
+    {
+      "id": "Example route",
+      "kind": "route",
+      "file": "illustrative-story.geojson",
+      "select": [
+        "route"
+      ],
+      "color": "ffd16b",
+      "width": 7,
+      "trace": 24
+    },
+    {
+      "id": "Example marker",
+      "kind": "station",
+      "file": "illustrative-story.geojson",
+      "select": [
+        "station"
+      ],
+      "color": "b5a6fb",
+      "offsets": {
+        "portrait": [
+          0.035,
+          -0.032
+        ],
+        "landscape": [
+          0.03,
+          0.035
+        ]
+      }
+    },
+    {
+      "id": "Example landmark",
+      "kind": "callout",
+      "file": "illustrative-story.geojson",
+      "select": [
+        "landmark"
+      ],
+      "color": "77c9fb",
+      "offsets": {
+        "portrait": [
+          -0.028,
+          0.028
+        ],
+        "landscape": [
+          -0.035,
+          0.03
+        ]
+      }
+    }
+  ],
+  "steps": [
+    {
+      "title": "Illustrative area",
+      "subtitle": "Synthetic geography",
+      "focus": [
+        "Boundary"
+      ],
+      "padding": 1.8,
+      "hold": 45,
+      "layers": {
+        "Boundary": 1,
+        "Example landmark": 1
+      }
+    },
+    {
+      "title": "Illustrative transit",
+      "focus": [
+        "Example route",
+        "Example marker"
+      ],
+      "padding": 1.6,
+      "hold": 52,
+      "transition": 30,
+      "layers": {
+        "Boundary": 0.33,
+        "Example route": 1,
+        "Example marker": 1
+      }
+    },
+    {
+      "title": "Illustrative stop",
+      "focus": [
+        "Example marker"
+      ],
+      "hold": 60,
+      "transition": 36,
+      "framing": {
+        "portrait": {
+          "min_scale": 1050
+        },
+        "landscape": {
+          "min_scale": 800
+        }
+      },
+      "layers": {
+        "Example route": 0.5,
+        "Example marker": 1
+      }
+    },
+    {
+      "title": "Illustrative pause",
+      "focus": [
+        "Example marker"
+      ],
+      "hold": 31,
+      "framing": {
+        "portrait": {
+          "min_scale": 1050
+        },
+        "landscape": {
+          "min_scale": 800
+        }
+      },
+      "layers": {
+        "Example marker": 1
+      }
+    },
+    {
+      "title": "Illustrative return",
+      "focus": [
+        "Example route",
+        "Example marker"
+      ],
+      "padding": 1.6,
+      "transition": 22,
+      "hold": 48,
+      "layers": {
+        "Example route": 1,
+        "Example marker": 1
+      }
+    }
+  ]
+}
