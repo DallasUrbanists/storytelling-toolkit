@@ -49,6 +49,11 @@ for layer in config["layers"]:
                 assert 0 < outline.data.bevel_factor_end < 1, outline.name
             scene.frame_set(end)
             assert math.isclose(outline.data.bevel_factor_end, 1), outline.name
+        for _, (start, _) in zip(draws, draws[1:]):
+            scene.frame_set(start - 2)
+            assert math.isclose(outline.data.bevel_factor_end, 1), outline.name
+            scene.frame_set(start - 1)
+            assert math.isclose(outline.data.bevel_factor_end, 0), outline.name
         mat = outline.data.materials[0]
         for frame, value in keys:
             scene.frame_set(frame)

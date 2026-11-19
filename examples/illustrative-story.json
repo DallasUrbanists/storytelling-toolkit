@@ -117,6 +117,38 @@
         "Example route": 0.5,
         "Example marker": 1
       }
+    },
+    {
+      "title": "Illustrative pause",
+      "focus": [
+        "Example marker"
+      ],
+      "hold": 31,
+      "framing": {
+        "portrait": {
+          "min_scale": 1050
+        },
+        "landscape": {
+          "min_scale": 800
+        }
+      },
+      "layers": {
+        "Example marker": 1
+      }
+    },
+    {
+      "title": "Illustrative return",
+      "focus": [
+        "Example route",
+        "Example marker"
+      ],
+      "padding": 1.6,
+      "transition": 22,
+      "hold": 48,
+      "layers": {
+        "Example route": 1,
+        "Example marker": 1
+      }
     }
   ]
 }

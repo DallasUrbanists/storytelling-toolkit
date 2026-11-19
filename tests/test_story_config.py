@@ -13,7 +13,7 @@ from story_config import FORMATS, frame_target, layer_events, positions, project
 class StoryConfigTests(unittest.TestCase):
     def test_fixture_loading(self):
         story = read_story(ROOT / "examples" / "illustrative-story.json")
-        self.assertEqual(len(story["steps"]), 3)
+        self.assertEqual(len(story["steps"]), 5)
         self.assertEqual(
             [layer["features"][0]["geometry"]["type"] for layer in story["layers"]],
             ["Polygon", "MultiLineString", "Point", "Point"],

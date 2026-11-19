@@ -92,6 +92,16 @@ def stroke(collection, name, paths, mat, width, at, camera=None, parent=None, dr
             curve.keyframe_insert(data_path="bevel_factor_end", frame=max(1, begin - 1))
             curve.bevel_factor_end = 1
             curve.keyframe_insert(data_path="bevel_factor_end", frame=finish)
+        if len(draws) > 1:
+            # Hold a completed trace until its next reset, when opacity is zero.
+            animation = curve.animation_data
+            strip = animation.action.layers[0].strips[0]
+            channels = strip.channelbag(animation.action_slot)
+            trace = channels.fcurves.find("bevel_factor_end")
+            completed = {finish for _, finish in draws[:-1]}
+            for key in trace.keyframe_points:
+                if key.co.x in completed:
+                    key.interpolation = "CONSTANT"
     return link(collection, name, curve, at, parent)
 
 
