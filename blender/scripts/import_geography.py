@@ -61,7 +61,6 @@ def main():
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
     scene = bpy.context.scene
-    scene.render.engine = "BLENDER_EEVEE_NEXT" if "BLENDER_EEVEE_NEXT" in {e.identifier for e in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items} else "CYCLES"
     scene.render.resolution_x = 960
     scene.render.resolution_y = 540
     scene.render.resolution_percentage = 100
@@ -81,6 +80,7 @@ def main():
         curve.dimensions = "3D"
         curve.bevel_depth = 2.5
         curve.bevel_resolution = 2
+        curve.bevel_factor_end = 0.0
         spline = curve.splines.new("POLY")
         spline.points.add(len(vertices)-1)
         for point, coords in zip(spline.points, vertices):
@@ -88,12 +88,17 @@ def main():
         spline.use_cyclic_u = True
         obj = bpy.data.objects.new(f"Boundary_{index+1}", curve)
         scene.collection.objects.link(obj)
-        # Whole-line appearance grows with the bevel setting, an editable animation.
-        curve.keyframe_insert(data_path="bevel_depth", frame=1)
-        curve.bevel_depth = 0.0
-        curve.keyframe_insert(data_path="bevel_depth", frame=1)
-        curve.bevel_depth = 2.5
-        curve.keyframe_insert(data_path="bevel_depth", frame=55)
+        # True draw-on: reveal an increasing fraction of the native curve.
+        curve.keyframe_insert(data_path="bevel_factor_end", frame=1)
+        curve.bevel_factor_end = 1.0
+        curve.keyframe_insert(data_path="bevel_factor_end", frame=55)
+        mat = bpy.data.materials.new("BoundaryBlue")
+        mat.diffuse_color = (0.12, 0.52, 0.95, 1.0)
+        mat.use_nodes = True
+        bsdf = mat.node_tree.nodes.get("Principled BSDF")
+        if bsdf:
+            bsdf.inputs["Base Color"].default_value = (0.12, 0.52, 0.95, 1.0)
+        curve.materials.append(mat)
         obj["source"] = os.path.basename(opts.geojson)
     xs = [v[0] for v in bounds]; ys = [v[1] for v in bounds]
     width = max(max(xs)-min(xs), 1)
@@ -115,11 +120,16 @@ def main():
     label = bpy.data.objects.new("FocusLabel", label_curve)
     scene.collection.objects.link(label)
     label.location=(center_x, min(ys)-height*.13, 1)
+    label.hide_render=True
     label.keyframe_insert(data_path="hide_render", frame=1)
     label.hide_render=False
     label.keyframe_insert(data_path="hide_render", frame=60)
 
     scene.world.color=(0.16,0.19,0.22)
+    label_mat = bpy.data.materials.new("LabelWhite")
+    label_mat.diffuse_color = (1.0, 1.0, 1.0, 1.0)
+    label_curve.materials.append(label_mat)
+    scene.view_settings.view_transform = "Standard"
     output = os.path.abspath(opts.output)
     os.makedirs(os.path.dirname(output), exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=output)
