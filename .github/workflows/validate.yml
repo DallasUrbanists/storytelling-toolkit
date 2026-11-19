@@ -12,6 +12,8 @@ jobs:
         with:
           python-version: '3.12'
       - name: Check Blender script Python syntax
-        run: python -m py_compile blender/scripts/import_geography.py
+        run: python -m py_compile blender/scripts/*.py tests/validate_story_scene.py
       - name: Validate sample GeoJSON
         run: python tests/validate_fixture.py
+      - name: Test geographic story configuration
+        run: python -m unittest discover -s tests -p "test_*.py"

@@ -1,0 +1,133 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "area",
+        "name": "Illustrative boundary",
+        "source": "SYNTHETIC - illustration only"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -96.829,
+              32.794
+            ],
+            [
+              -96.816,
+              32.796
+            ],
+            [
+              -96.811,
+              32.788
+            ],
+            [
+              -96.82,
+              32.782
+            ],
+            [
+              -96.829,
+              32.794
+            ]
+          ],
+          [
+            [
+              -96.8255,
+              32.79
+            ],
+            [
+              -96.823,
+              32.788
+            ],
+            [
+              -96.821,
+              32.79
+            ],
+            [
+              -96.824,
+              32.792
+            ],
+            [
+              -96.8255,
+              32.79
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "route",
+        "name": "Illustrative route",
+        "source": "SYNTHETIC - illustration only"
+      },
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [
+              -96.829,
+              32.793
+            ],
+            [
+              -96.823,
+              32.791
+            ],
+            [
+              -96.818,
+              32.788
+            ],
+            [
+              -96.812,
+              32.786
+            ]
+          ],
+          [
+            [
+              -96.822,
+              32.791
+            ],
+            [
+              -96.818,
+              32.794
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "station",
+        "name": "Illustrative station",
+        "source": "SYNTHETIC - illustration only"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -96.818,
+          32.788
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "landmark",
+        "name": "Illustrative landmark",
+        "source": "SYNTHETIC - illustration only"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -96.819,
+          32.792
+        ]
+      }
+    }
+  ]
+}

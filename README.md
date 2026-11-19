@@ -1,6 +1,6 @@
 # Storytelling Toolkit
 
-Local-first, open-source geographic storytelling workflows for **QGIS → Blender → DaVinci Resolve Free**.
+Local-first, open-source geographic storytelling workflows for **QGIS  Blender  DaVinci Resolve Free**.
 
 - **QGIS:** research, study areas, geographic data, and export.
 - **Blender:** editable 2.5D scenes, camera animation, labels, routes, street transformations, and rendering.
@@ -8,6 +8,8 @@ Local-first, open-source geographic storytelling workflows for **QGIS → Blende
 - **GitHub:** reusable scripts, templates, tests, and documentation.
 - **Google Drive (per-video projects):** source QGIS/Blender/Resolve projects and finished media. Keep large caches local; sync only after closing editors.
 
-The first implementation milestone is a minimal, testable QGIS-to-Blender GeoJSON workflow. See `docs/sprint.md` and `docs/day-1.md` once added.
+- [Day 1 QGIS-to-Blender runbook](docs/day-1.md) for a single editable boundary reveal.
+- [Day 2 geographic storytelling runbook](docs/day-2.md) for configurable camera moves, routes, callouts, and dual-format compositions.
+- [Four-day sprint plan](docs/sprint.md) for milestone goals.
 
 This repository is MIT licensed; third-party tools, geographic datasets, basemap imagery, and model assets have their own licenses.
