@@ -1,5 +1,6 @@
 """Build one editable Blender composition from a local geographic story."""
 import argparse
+import json
 import math
 from functools import lru_cache
 import sys
@@ -10,9 +11,11 @@ from mathutils import Matrix, Vector
 from mathutils.geometry import delaunay_2d_cdt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from story_layout import Placement, parallel_routes, place_callout, rect, samples, split_trace, title_corner
+from story_layout import (
+    Placement, municipality_offset, parallel_routes, place_callout, rect, samples, split_trace, title_corner,
+)
 from story_config import (
-    FORMATS, badge_keys, bounds, frame_target, layer_events, positions,
+    FORMATS, badge_keys, bounds, frame_target, layer_events, municipality_center, positions,
     project, read_story, route_opacity_keys, route_starts, schedule,
 )
 
@@ -507,10 +510,40 @@ def styled_routes(collection, layer, packed, keys, draws, camera, layouts, z, en
             interline_stroke(branch, remaining, camera, separation, scale)
 
 
+def municipality_data(layer, origin):
+    for feature in layer["features"]:
+        props = feature.get("properties", {})
+        label = props.get("name", props.get("NAME"))
+        if not label:
+            raise ValueError(f"{layer['id']}: municipality feature needs a name")
+        yield (label, municipality_center(feature["geometry"], origin),
+               layer.get("color", "91a9b7"), layer.get("text_size", .018), layer.get("placement", "center"))
+
+
+def municipality_label(collection, name, center, color, size, keys, camera, z, layouts, placement="center"):
+    root = link(collection, name + " | Municipal center", at=(*center, z))
+    for axis in (0, 1):
+        scale_driver(root, "scale", camera, 1, axis)
+    left, right = glyph_bounds(name, size)
+    width, height = right - left + .006, size * 1.15
+    dx, dy = municipality_offset(layouts, center, width, height, placement)
+    ink = material(name + " | Municipality ink", color, keys)
+    obj = caption(collection, name + " | Municipality", name, ink, size,
+                  (dx - (left + right) / 2, dy, 0), root, "CENTER")
+    for layout in layouts:
+        x, y = layout.screen(center)
+        layout.boxes.append(rect((x + dx, y + dy), width, height))
+    return obj
+
+
 def add_layer(collection, layer, keys, draws, config, z, camera, format_name, mask_bounds,
               layouts, packed, scale, end, pending):
     layout = layouts[0]
     kind, name, origin = layer["kind"], layer["id"], config["origin"]
+    if kind == "municipalities":
+        for label, center, color, size, placement in municipality_data(layer, origin):
+            municipality_label(collection, label, center, color, size, keys, camera, z, layouts, placement)
+        return
     if kind == "raster":
         raster_layer(collection, layer, keys, origin, z)
         return
@@ -633,7 +666,8 @@ def title_position(dimensions, layout, title, subtitle="", previous="LEFT"):
     left_box = (left - .007, bottom, left + span, top + TITLE_SIZE)
     right_box = (right - span, bottom, right + .007, top + TITLE_SIZE)
     side = title_corner(layout.title_conflicts(left_box), layout.title_conflicts(right_box), previous)
-    return side, (left if side == "LEFT" else right), top, subtitle_y, title
+    title_y = top - max(0, len(title_lines) - 1) * TITLE_SIZE / 2
+    return side, (left if side == "LEFT" else right), title_y, subtitle_y, title
 
 
 def title_cards(scene, camera, steps, timings, dimensions, metadata, layouts):
@@ -756,8 +790,22 @@ def build(config, format_name):
                 continue
             for number, path in enumerate(paths, 1):
                 layout.add_route((name, number), path, lane_spacing(layer))
-    stacking = {name: index * 400 for index, name in enumerate(layers, 1)}
-    order = {"route": 0, "boundary": 0, "raster": 0, "street_labels": 1, "callout": 2, "station": 2}
+    def depth(layer):
+        if layer["kind"] == "municipalities":
+            return 1
+        if layer.get("basemap", False) or layer["kind"] == "raster":
+            return 0
+        if layer["kind"] == "route" and not any(key in layer for key in (
+                "route_mode", "route_labels", "route_overrides", "avoid_labels", "interline", "trace")):
+            return 0
+        return 2
+
+    ordered = list(layers.values())
+    if any(layer["kind"] == "municipalities" for layer in ordered):
+        ordered.sort(key=depth)
+    stacking = {layer["id"]: index * 400 for index, layer in enumerate(ordered, 1)}
+    order = {"route": 0, "boundary": 0, "raster": 0, "street_labels": 1, "callout": 2,
+             "station": 2, "municipalities": 3}
     pending = []
     for layer in sorted(layers.values(), key=lambda item: order[item["kind"]]):
         name = layer["id"]
@@ -768,6 +816,11 @@ def build(config, format_name):
         add_layer(collection, layer, keys, draws, config, stacking[name], camera, format_name, mask_bounds,
                   active_layouts or layouts[:1], packed.get(name), scale, scene.frame_end, pending)
     place_route_badges(pending, camera, max(stacking.values()) + 320)
+    scene["municipality_labels_json"] = json.dumps([
+        entry for layer in layers.values()
+        if layer["kind"] == "municipalities" and layer.get("labels", True) and config.get("municipality_labels", True)
+        for entry in municipality_data(layer, config["origin"])
+    ])
     title_cards(scene, camera, steps, timings, dimensions, config, layouts)
     for screen in bpy.data.screens:
         for area in screen.areas:
