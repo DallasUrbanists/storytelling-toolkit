@@ -1,0 +1,141 @@
+{
+  "id": "crash-refuge-clearance",
+  "description": "Synthetic mechanics test for editorial illustration",
+  "roadway": "../../examples/illustrative-roadway.json",
+  "camera": {
+    "portrait": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "scale": 100,
+      "bearing": 8,
+      "tilt": 31
+    },
+    "landscape": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "scale": 124,
+      "bearing": 28,
+      "tilt": 33
+    }
+  },
+  "frames": 320,
+  "actors": [
+    {
+      "id": "Ambulance",
+      "model": "ambulance",
+      "role": "primary",
+      "motion": {
+        "start": [
+          1,
+          0,
+          -39,
+          0,
+          0,
+          0
+        ],
+        "segments": [
+          {
+            "kind": "move",
+            "frame": 68,
+            "to": [
+              0,
+              -23
+            ]
+          },
+          {
+            "kind": "lane-change",
+            "frame": 100,
+            "to": [
+              3.124,
+              -13
+            ]
+          },
+          {
+            "kind": "move",
+            "frame": 167,
+            "to": [
+              3.124,
+              33
+            ],
+            "ease": "out"
+          }
+        ]
+      }
+    },
+    {
+      "id": "Queue lead",
+      "model": "sedan",
+      "role": "context",
+      "poses": [
+        [
+          1,
+          3.124,
+          -34,
+          0,
+          0,
+          0
+        ],
+        [
+          20,
+          3.124,
+          -34,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "Refuge walker",
+      "model": "pedestrian",
+      "role": "secondary",
+      "poses": [
+        [
+          1,
+          -8,
+          0.45,
+          0,
+          90,
+          0
+        ],
+        [
+          65,
+          0,
+          0.45,
+          0,
+          90,
+          0
+        ],
+        [
+          125,
+          0,
+          0.45,
+          0,
+          90,
+          0
+        ],
+        [
+          167,
+          7.7,
+          0.45,
+          0,
+          90,
+          0
+        ]
+      ]
+    }
+  ],
+  "layout": "proposed",
+  "roadway_overrides": {
+    "midblock_crossing": {
+      "center_m": 2,
+      "refuge_width_m": 2.2
+    }
+  }
+}

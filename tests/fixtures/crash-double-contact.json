@@ -1,0 +1,189 @@
+{
+  "id": "crash-double-contact",
+  "description": "Synthetic mechanics test for editorial illustration",
+  "roadway": "../../examples/illustrative-roadway.json",
+  "camera": {
+    "portrait": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "scale": 35,
+      "bearing": 8,
+      "tilt": 31
+    },
+    "landscape": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "scale": 66,
+      "bearing": 28,
+      "tilt": 33
+    }
+  },
+  "frames": 320,
+  "actors": [
+    {
+      "id": "First vehicle",
+      "model": "SUV",
+      "role": "primary",
+      "poses": [
+        [
+          1,
+          -1.68,
+          -20,
+          0,
+          0,
+          0
+        ],
+        [
+          96,
+          -1.68,
+          -3.18,
+          0,
+          0,
+          0
+        ],
+        [
+          100,
+          -1.68,
+          -2.635,
+          0,
+          0,
+          0
+        ],
+        [
+          105,
+          -1.68,
+          -2.64,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "Crossing figure",
+      "model": "pedestrian",
+      "role": "secondary",
+      "poses": [
+        [
+          1,
+          -9,
+          0,
+          0,
+          90,
+          0
+        ],
+        [
+          100,
+          -1.68,
+          0,
+          0,
+          90,
+          0
+        ],
+        [
+          106,
+          -0.86,
+          0.15,
+          0.17,
+          90,
+          17
+        ],
+        [
+          120,
+          1.68,
+          0,
+          0,
+          90,
+          15
+        ],
+        [
+          124,
+          2.38,
+          -0.12,
+          0.18,
+          90,
+          25
+        ],
+        [
+          127,
+          2.96,
+          0.02,
+          0.23,
+          90,
+          25
+        ],
+        [
+          142,
+          4.45,
+          0.23,
+          0,
+          90,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "Second vehicle",
+      "model": "sedan",
+      "role": "secondary",
+      "poses": [
+        [
+          1,
+          1.68,
+          20,
+          0,
+          180,
+          0
+        ],
+        [
+          115,
+          1.68,
+          3.1,
+          0,
+          180,
+          0
+        ],
+        [
+          120,
+          1.68,
+          2.495,
+          0,
+          180,
+          0
+        ],
+        [
+          125,
+          1.68,
+          2.5,
+          0,
+          180,
+          0
+        ]
+      ]
+    }
+  ],
+  "impacts": [
+    {
+      "actor": "First vehicle",
+      "other": "Crossing figure",
+      "frame": 100,
+      "surface": "front",
+      "other_surface": "right",
+      "smoke_blocks": 3
+    },
+    {
+      "actor": "Second vehicle",
+      "other": "Crossing figure",
+      "frame": 120,
+      "surface": "front",
+      "other_surface": "left",
+      "smoke_blocks": 3
+    }
+  ]
+}

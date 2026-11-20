@@ -17,7 +17,8 @@ from traffic_paths import SIZES
 from traffic_checks import footprint_gaps
 from roadway_traffic import motor_mesh
 from urban_camera import key_camera
-from active_travel_assets import materials_for, walker_parts
+from active_travel_assets import Parts, materials_for, walker_parts
+from crash_motion import motion_poses
 
 PAINT={"primary":(.78,.018,.025),"secondary":(.88,.58,.025),"context":(.23,.25,.28)}
 SURFACES={"front":(1,1),"rear":(1,-1),"left":(0,-1),"right":(0,1)}
@@ -38,6 +39,7 @@ def freeze_road(scene, frame):
     for ink in bpy.data.materials:
         if ink.node_tree and ink.node_tree.animation_data:
             ink.node_tree.animation_data_clear()
+    scene.camera.data.animation_data_clear()
 
 
 def set_keys(obj, poses):
@@ -66,6 +68,15 @@ def make_actor(col, root, cue, mats):
             col.objects.link(obj)
             obj.parent=actor
             obj.location=at
+            if label=="arm":
+                raised=Parts()
+                raised.bar((0,0,0),(0,0,.27),.075,0,.056)
+                raised.bar((0,0,.27),(0,0,.48),.051,3,.041)
+                arm=bpy.data.objects.new(f"{name} | Rigid arm",raised.mesh("Straight arm",palette))
+                col.objects.link(arm)
+                arm.parent=actor
+                arm.location=at
+                arm.hide_render=arm.hide_viewport=True
         return actor,None
     source="minivan" if model=="ambulance" else model
     ink=material(f"{name} | Body",PAINT[cue["role"]])
@@ -94,10 +105,10 @@ def contact_point(event, actor, model):
     return actor.matrix_world@result
 
 
-def crumple(body, surface, depth, frame):
+def crumple(body, surface, depth, frame, label):
     if body.data.shape_keys is None:
         body.shape_key_add(name="Undamaged",from_mix=False)
-    key=body.shape_key_add(name=f"{surface.title()} crumple | frame {frame}",from_mix=False)
+    key=body.shape_key_add(name=f"{surface.title()} crumple | {label}",from_mix=False)
     axis,sign=SURFACES[surface]
     extent=max(sign*v.co[axis] for v in body.data.vertices)
     for v,original in zip(key.data,body.data.vertices):
@@ -109,22 +120,40 @@ def crumple(body, surface, depth, frame):
         key.keyframe_insert(data_path="value",frame=f,group="Localized impact")
 
 
-def rigid_pose(actor, frame):
+def rigid_pose(actor, frame, label):
     for child in actor.children:
-        if " | arm" not in child.name: continue
-        child.rotation_euler.x=0
-        child.keyframe_insert(data_path="rotation_euler",index=0,frame=frame-1)
-        child.rotation_euler.x=math.pi
-        child.keyframe_insert(data_path="rotation_euler",index=0,frame=frame)
+        raised=" | Rigid arm" in child.name
+        if not raised and " | arm" not in child.name: continue
+        child["Impact pose"] = label
+        for name in ("hide_render","hide_viewport"):
+            for f,value in ((frame-1,raised),(frame,not raised)):
+                setattr(child,name,value)
+                child.keyframe_insert(data_path=name,frame=f)
 
 
-def smoke(col, position, frame, amount):
+def release_walking_aid(actor, frame, label):
+    aid=next((o for o in actor.children if o.name.endswith(" | Rollator")),None)
+    if aid is None:return
+    matrix=aid.matrix_world.copy()
+    aid.parent=None
+    aid.matrix_basis=matrix
+    aid["Impact pose"]=label
+    aid["Released aid for"]=actor["Actor ID"]
+    follow=aid.constraints.new("COPY_TRANSFORMS")
+    follow.target=actor
+    for f,influence in ((frame-1,1),(frame,0)):
+        follow.influence=influence
+        follow.keyframe_insert(data_path="influence",frame=f)
+
+
+def smoke(col, position, frame, amount, label):
     ink=material("Impact smoke",(.34,.37,.39))
     for i in range(amount):
         angle=i*2.39996
         drift=Vector((math.cos(angle),math.sin(angle),.40+i*.085))
         size=.22+i*.047
         cube=box(col,f"Impact smoke {frame} | {i+1}",position,(size,)*3,ink)
+        cube["Impact smoke"] = label
         for f,scale,point in ((frame-1,0,position),(frame+5,.82,position+drift*.5),
                               (frame+18,1.25,position+drift),(frame+36,0,position+drift*2.1)):
             cube.location=point
@@ -177,8 +206,9 @@ def validate(cues, events, frames):
 
 
 def build(config, directory, orientation):
-    cues=config["actors"]
-    events=config.get("impacts",[])
+    cues=[dict(c,poses=motion_poses(c["motion"])) if "motion" in c else c for c in config["actors"]]
+    events=[dict(e,label=f"Contact {i:02}",marker=f"Contact {i:02} | {e['actor']} / {e['other']}")
+            for i,e in enumerate(config.get("impacts",[]),1)]
     frames=config["frames"]
     validate(cues,events,frames)
     roadway=json.loads((directory/config["roadway"]).read_text(encoding="utf-8-sig"))
@@ -191,15 +221,20 @@ def build(config, directory, orientation):
     scene.name=config["id"]
     scene.frame_end=frames
     scene["Illustration"]=config["description"]
+    scene["Review metadata"]=json.dumps({
+        "actors":[{k:v for k,v in c.items() if k not in ("poses","motion")} for c in cues],
+        "impacts":events, "visibility_checks":config.get("visibility_checks",[]),
+    })
     root=scene.objects["Roadway origin and bearing"]
     col=collection(scene,"Actors | editable motion")
     mats={k:material(k,v) for k,v in COLORS.items()}
     actors={c["id"]:make_actor(col,root,c,mats) for c in cues}
     by_id={c["id"]:c for c in cues}
     impact_col=collection(scene,"Impact | local deformation and smoke")
+    first_rigid=set()
     for event in events:
         frame=event["frame"]
-        scene.timeline_markers.new(f"Contact | {event['actor']} / {event['other']}",frame=frame)
+        scene.timeline_markers.new(event["marker"],frame=frame)
         scene.frame_set(frame)
         a,body=actors[event["actor"]]
         b,other=actors[event["other"]]
@@ -208,10 +243,18 @@ def build(config, directory, orientation):
         pb=contact_point({"surface":other_surface},b,by_id[event["other"]]["model"])
         if (pa.xy-pb.xy).length>.45:
             raise ValueError(f"Selected impact surfaces do not meet at frame {frame}")
+        event["point"] = list((pa+pb)/2)
+        label=event["label"]
         for actor,mesh,face in ((a,body,surface),(b,other,other_surface)):
-            if mesh: crumple(mesh,face,event.get("crumple_m",.22),frame)
-            else: rigid_pose(actor,frame)
-        smoke(impact_col,(pa+pb)/2,frame,event.get("smoke_blocks",6))
+            if mesh: crumple(mesh,face,event.get("crumple_m",.22),frame,label)
+            elif actor.name not in first_rigid:
+                rigid_pose(actor,frame,label)
+                release_walking_aid(actor,frame,label)
+                first_rigid.add(actor.name)
+        smoke(impact_col,Vector(event["point"]),frame,event.get("smoke_blocks",6),label)
+    metadata=json.loads(scene["Review metadata"])
+    metadata["impacts"]=events
+    scene["Review metadata"]=json.dumps(metadata)
     settled=max(c["poses"][-1][0] for c in cues)
     settled=max([settled,*[e["frame"]+36 for e in events]])
     scene.timeline_markers.new("Settled | final hold",frame=settled)
