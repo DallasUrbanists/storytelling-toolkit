@@ -9,7 +9,8 @@ import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_story import caption, feature_polygons, link, map_fill, material, paint, scale_driver, stroke
-from story_config import FORMATS, frame_target, project
+from story_config import FORMATS, bounds, frame_target, project
+from story_layout import overlap
 from urban_camera import MODES, PRESETS, bake_visibility, key_camera, sample_subject
 from urban_massing import create_massing
 
@@ -35,6 +36,27 @@ def line_paths(dataset, origin):
     if not output or any(len(p) < 2 for p in output):
         raise ValueError("Expected nonempty polylines")
     return output
+
+
+def overview_street_extent(center, scale, dimensions, margin=1.05):
+    """Local-meter footprint of the overhead orthographic camera, plus bleed."""
+    x, y = center
+    longest = max(dimensions)
+    dx, dy = (scale * margin * side / (2 * longest) for side in dimensions)
+    return x - dx, y - dy, x + dx, y + dy
+
+
+def street_context_paths(directory, primary, supplemental, origin, extent):
+    """Take real source routes covering the camera extent, including edge crossings."""
+    paths = []
+    for name in (primary, *supplemental):
+        if not name:
+            continue
+        for path in line_paths(read(directory / name), origin):
+            left, bottom, right, top = bounds(path)
+            if overlap((left - .01, bottom - .01, right + .01, top + .01), extent):
+                paths.append(path)
+    return paths
 
 
 def flat(name, color):
@@ -123,11 +145,13 @@ def add_shot(scene, directory, config, format_name, mode):
         rings = [ring for feature in data["features"] for polygon in feature_polygons(feature["geometry"], origin)
                  for ring in polygon]
         full_center, full_scale = frame_target([p for ring in rings for p in ring], FORMATS[format_name], 1.16)
-    rectangle(ground, "Ground", full_center, 9000, z, flat("Dark slate", "223742"))
+    full_scale = fields.get("overview_scale", full_scale)
+    extent = overview_street_extent(full_center, full_scale, FORMATS[format_name])
+    rectangle(ground, "Ground", full_center, max(9000, full_scale), z, flat("Dark slate", "223742"))
     if overview_bounds is not None:
         add_polygon(ground, data, origin, "Estimated walkshed frontage", "355e56", z + 0.015)
-    if context:
-        paths = line_paths(read(directory / context), origin)
+    paths = street_context_paths(directory, context, config.get("context_supplemental_lines", []), origin, extent)
+    if paths:
         ground_line(ground, "Street context", paths, "3f5560", 5, z + 0.05)
     if config.get("zoning"):
         zoning = group(stage, "Optional | City zoning")
@@ -176,7 +200,6 @@ def add_shot(scene, directory, config, format_name, mode):
     if "center" in fields:
         center = project(fields["center"], origin)
     detail_scale = fields.get("scale", 1550)
-    full_scale = fields.get("overview_scale", full_scale)
     tilt = fields.get("tilt", config.get("tilt", PRESETS["isometric"]))
     end_tilt = fields.get("end_tilt", config.get("end_tilt", tilt))
     for offset, xy, scale, angle, slope in (
