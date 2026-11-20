@@ -15,3 +15,5 @@ Local-first, open-source geographic storytelling workflows for **QGIS  Blender 
 - [Four-day sprint plan](docs/sprint.md) for milestone goals.
 
 This repository is MIT licensed; third-party tools, geographic datasets, basemap imagery, and model assets have their own licenses.
+
+See [Maple production tools](docs/maple-production-tools.md) for the default style, packaged DART rail, and editable roadway examples.

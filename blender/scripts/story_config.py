@@ -5,6 +5,8 @@ from pathlib import Path
 
 
 FORMATS = {"landscape": (1920, 1080), "portrait": (1080, 1920)}
+MAPLE_BUS_BADGE_REVEAL_FRAMES = 6
+BLENDER_HOME = Path(__file__).resolve().parents[1]
 KINDS = {"boundary", "route", "callout", "station", "raster", "street_labels", "municipalities"}
 GEOMETRIES = {
     "boundary": {"Polygon", "MultiPolygon"},
@@ -107,6 +109,12 @@ def check_route_labels(options, name):
         raise ValueError(f"{name}: route label size must be a positive fraction")
     if "uppercase" in options and type(options["uppercase"]) is not bool:
         raise ValueError(f"{name}: route label uppercase must be true or false")
+    if options.get("text_weight", "regular") not in ("regular", "bold"):
+        raise ValueError(f"{name}: route label text_weight must be regular or bold")
+    if type(options.get("square_minimum", False)) is not bool:
+        raise ValueError(f"{name}: route label square_minimum must be true or false")
+    if type(options.get("reveal_frames", 0)) is not int or options.get("reveal_frames", 0) < 0:
+        raise ValueError(f"{name}: route label reveal_frames must be a nonnegative frame count")
     if "corner" in options and (type(options["corner"]) not in (int, float) or not 0 <= options["corner"] <= 0.1):
         raise ValueError(f"{name}: route label corner must be between 0 and 0.1")
     if "x_padding" in options:
@@ -160,11 +168,13 @@ def select_direction(feature, selector, name):
 
 
 def apply_style_preset(config):
-    preset = config.get("style_preset")
+    preset = config.setdefault("style_preset", "maple")
     if preset is None:
         return
     if preset != "maple":
         raise ValueError(f"Unknown style_preset: {preset!r}")
+    style = json.loads((BLENDER_HOME / "presets/maple.json").read_text(encoding="utf-8"))
+    config.setdefault("editorial_text", style["editorial_text"])
     for layer in config["layers"]:
         if (layer["kind"] in {"boundary", "route", "raster"} and not layer.get("delay")
                 and not layer.get("trace") and "route_labels" not in layer):
@@ -172,6 +182,7 @@ def apply_style_preset(config):
         if layer["kind"] in {"callout", "station"}:
             defaults = {
                 "label_backing": True, "auto_place": True, "text_weight": "bold",
+                "animate_callout": True,
                 "backing_corner": 0, "backing_x_padding": "character",
                 "backing_color": "ffffff", "leader_color": "ffffff",
                 "dot_color": "ffffff", "casing_color": "ffffff",
@@ -179,20 +190,41 @@ def apply_style_preset(config):
             for key, value in defaults.items():
                 layer.setdefault(key, value)
         if layer["kind"] == "route":
-            if layer.get("route_mode") in ("bus", "rail"):
-                layer.setdefault("transit_casing", "0d1822")
-            if layer.get("route_mode") == "bus":
-                layer.setdefault("uniform_color", "a695e9")
+            mode = layer.get("route_mode")
+            if mode in ("bus", "rail"):
+                for key, value in style[mode].items():
+                    if key == "route_overrides":
+                        if layer.get("source") == "dart-rail":
+                            overrides = layer.setdefault(key, {})
+                            for service, defaults in value.items():
+                                if "select" not in layer or service in layer["select"]:
+                                    user = overrides.setdefault(service, {})
+                                    for option, setting in defaults.items():
+                                        user.setdefault(option, setting)
+                    else:
+                        layer.setdefault(key, value)
+            if mode in ("bus", "rail"):
+                layer.setdefault("route_labels", {})
             if isinstance(layer.get("route_labels"), dict):
                 padding = 0.0015 if layer.get("route_mode") == "bus" else "character"
                 for key, value in {"uppercase": True, "corner": 0, "x_padding": padding}.items():
                     layer["route_labels"].setdefault(key, value)
+                if mode in ("bus", "rail"):
+                    layer["route_labels"].setdefault("text_weight", "bold")
+                    layer["route_labels"].setdefault("square_minimum", True)
+                if mode == "bus":
+                    layer["route_labels"].setdefault("reveal_frames", MAPLE_BUS_BADGE_REVEAL_FRAMES)
                 layer.setdefault("trace", 30)
 
 
 def read_story(path):
     path = Path(path)
     config = json.loads(path.read_text(encoding="utf-8-sig"))
+    for layer in config["layers"]:
+        if layer.get("source") == "dart-rail":
+            if layer["kind"] != "route":
+                raise ValueError("The dart-rail source requires a route layer")
+            layer["route_mode"] = "rail"
     apply_style_preset(config)
     layers = config["layers"]
     if not layers or not config["steps"]:
@@ -208,13 +240,19 @@ def read_story(path):
             value = layer.get(option, 0)
             if type(value) is not int or value < 0:
                 raise ValueError(f"{name}: {option} must be a nonnegative integer frame count")
+        if "trace_easing" in layer and (kind != "route" or layer["trace_easing"] not in ("default", "ease_out")):
+            raise ValueError(f"{name}: route trace_easing must be default or ease_out")
+        if "shared_trace_speed" in layer and (kind != "route" or type(layer["shared_trace_speed"]) is not bool):
+            raise ValueError(f"{name}: shared_trace_speed must be a boolean on a route layer")
+        if "trace_stagger" in layer and (type(layer["trace_stagger"]) is not int or layer["trace_stagger"] < 0):
+            raise ValueError(f"{name}: trace_stagger must be a nonnegative frame count")
         if kind == "municipalities" and layer.get("placement", "center") not in ("center", "dynamic"):
             raise ValueError(f"{name}: municipality placement must be 'center' or 'dynamic'")
         if "route_labels" in layer:
             if kind != "route":
                 raise ValueError(f"{name}: route_labels must be used on a route layer")
             check_route_labels(layer["route_labels"], name)
-        for option in ("show_holes", "label_backing", "auto_place", "opening_visible"):
+        for option in ("show_holes", "label_backing", "auto_place", "opening_visible", "animate_callout"):
             if option in layer and type(layer[option]) is not bool:
                 raise ValueError(f"{name}: {option} must be true or false")
         if "interline" in layer:
@@ -223,7 +261,8 @@ def read_story(path):
                     type(value) not in (int, float) or not 0 < value < float("inf")
                     for value in interline.values()):
                 raise ValueError(f"{name}: interline settings must be positive numbers on a route layer")
-        layer["path"] = (path.parent / layer["file"]).resolve()
+        layer["path"] = (BLENDER_HOME / "assets/dart-rail.geojson" if layer.get("source") == "dart-rail"
+                         else (path.parent / layer["file"]).resolve())
         if kind == "raster":
             if not layer["path"].is_file():
                 raise ValueError(f"{name}: raster file is missing")
@@ -319,6 +358,10 @@ def schedule(steps):
     return result
 
 
+def outgoing_fade_end(first, arrival):
+    return first + (arrival - first) / 2
+
+
 def layer_events(layer, steps, timings):
     """Return opacity keys and draw-on intervals for a layer."""
     keys, draws = {1: 0}, []
@@ -331,8 +374,9 @@ def layer_events(layer, steps, timings):
             begin = min(arrival + layer.get("delay", 0), end)
         else:
             begin = first
-        finish = min(begin + layer.get("fade", 12), end)
-        keys[max(1, begin - 1)] = current
+        outgoing = target == 0 and arrival > first
+        finish = outgoing_fade_end(first, arrival) if outgoing else min(begin + layer.get("fade", 12), end)
+        keys[begin if outgoing else max(1, begin - 1)] = current
         keys[finish] = target
         if begin == 1 and layer.get("opening_visible"):
             keys[1] = target
@@ -357,6 +401,42 @@ def badge_keys(options, starts, end):
     return {frame: int(any(first <= frame <= last for first, last in windows))
             for frame in sorted({1, *(first for first, _ in windows if first <= end),
                                 *(last + 1 for _, last in windows if last < end)})}
+
+
+def shared_trace_intervals(lengths_by_route, baseline_frames, stagger=0):
+    """Return each spline's start/end offset in frames at a single distance per frame."""
+    totals = [sum(parts) for parts in lengths_by_route]
+    if not baseline_frames or not any(totals):
+        return [[] for _ in totals]
+    speed = min(length for length in totals if length > 0) / baseline_frames
+    result = []
+    for index, parts in enumerate(lengths_by_route):
+        frame = index * stagger
+        intervals = []
+        for length in parts:
+            end = frame + length / speed
+            intervals.append((frame, end))
+            frame = end
+        result.append(intervals)
+    return result
+
+
+def badge_opacity_keys(timing, reveal_frames):
+    if not reveal_frames:
+        return [(1, 1)]
+    keys = {1: 0}
+    entries = []
+    for frame, visible in sorted(timing.items()):
+        if not entries or entries[-1][1] != visible:
+            entries.append((frame, visible))
+    for i, (frame, visible) in enumerate(entries):
+        keys[frame] = 0
+        if visible:
+            limit = entries[i+1][0]-1 if i+1 < len(entries) else frame+reveal_frames
+            keys[min(frame+reveal_frames,limit)] = 1
+            if i+1 < len(entries):
+                keys[limit] = 1
+    return sorted(keys.items())
 
 
 def route_opacity_keys(keys, draws):

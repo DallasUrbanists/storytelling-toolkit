@@ -1,0 +1,32 @@
+{
+  "origin": [
+    -96.8,
+    32.78
+  ],
+  "credit": "DART rail alignments from the Dallas Urbanists improvement-map catalog",
+  "layers": [
+    {
+      "id": "DART rail",
+      "kind": "route",
+      "source": "dart-rail"
+    },
+    {
+      "id": "Hospital",
+      "kind": "callout",
+      "file": "fresh-maple.geojson"
+    }
+  ],
+  "steps": [
+    {
+      "title": "DART rail",
+      "hold": 140,
+      "layers": {
+        "DART rail": 1,
+        "Hospital": 1
+      },
+      "focus": [
+        "DART rail"
+      ]
+    }
+  ]
+}

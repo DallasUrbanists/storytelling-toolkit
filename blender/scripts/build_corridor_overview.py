@@ -87,13 +87,15 @@ def build(config, source, orientation):
     for frame, target, bearing in ((1,center,0),(61,center,0),(132,center,5),
                                   (198,project(config["transition_anchor"],origin),13)):
         key_camera(camera,frame,(*target,0),scale,bearing,0,7000)
-    box(col,"Header",(0,h*.413,-5.1),(w*.94,h*.13,.02),dark,camera)
-    box(col,"Footer",(0,-h*.398,-5.1),(w*.94,h*.16,.02),dark,camera)
     base = min(w,h)
     x = -w*.45
-    text(col,camera,"MAPLE AVENUE SAFETY PROJECT",x,h*.436,base*.024,green)
-    text(col,camera,"Bike lanes along Maple",x,h*.377,base*.060,white)
-    text(col,camera,"City of Dallas 2024 planning exhibit",x,-h*.457,base*.027,green)
+    if config.get("editorial_text",False):
+        box(col,"Header",(0,h*.413,-5.1),(w*.94,h*.13,.02),dark,camera)
+        box(col,"Footer",(0,-h*.398,-5.1),(w*.94,h*.16,.02),dark,camera)
+        for key,y,size,ink in (("heading",.436,.024,green),("title",.377,.060,white),
+                               ("credit",-.457,.027,green)):
+            if config.get(key):
+                text(col,camera,config[key],x,h*y,base*size,ink)
     for feature in config["callouts"]:
         first, last = feature["frames"]
         if feature.get("anchor"):
@@ -103,8 +105,9 @@ def build(config, source, orientation):
                       for i in range(25)]
             ring = stroke(col,feature["label"], coords, max(7,scale*.0035), orange, 55)
             visible(ring,first,last,scene.frame_end)
-        label = text(col,camera,feature["label"],x,-h*.387,base*.040,white)
-        visible(label,first,last,scene.frame_end)
+        if config.get("editorial_text",False):
+            label = text(col,camera,feature["label"],x,-h*.387,base*.040,white)
+            visible(label,first,last,scene.frame_end)
         scene.timeline_markers.new(feature["label"],frame=first)
     scene.frame_set(1)
     return scene
