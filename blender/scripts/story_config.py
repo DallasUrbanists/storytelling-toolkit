@@ -134,6 +134,9 @@ def apply_style_preset(config):
     if preset != "maple":
         raise ValueError(f"Unknown style_preset: {preset!r}")
     for layer in config["layers"]:
+        if (layer["kind"] in {"boundary", "route", "raster"} and not layer.get("delay")
+                and not layer.get("trace") and "route_labels" not in layer):
+            layer.setdefault("opening_visible", True)
         if layer["kind"] in {"callout", "station"}:
             defaults = {
                 "label_backing": True, "auto_place": True,
@@ -171,7 +174,7 @@ def read_story(path):
             if kind != "route":
                 raise ValueError(f"{name}: route_labels must be used on a route layer")
             check_route_labels(layer["route_labels"], name)
-        for option in ("show_holes", "label_backing", "auto_place"):
+        for option in ("show_holes", "label_backing", "auto_place", "opening_visible"):
             if option in layer and type(layer[option]) is not bool:
                 raise ValueError(f"{name}: {option} must be true or false")
         if "interline" in layer:
@@ -274,6 +277,8 @@ def layer_events(layer, steps, timings):
         finish = min(begin + layer.get("fade", 12), end)
         keys[max(1, begin - 1)] = current
         keys[finish] = target
+        if begin == 1 and layer.get("opening_visible"):
+            keys[1] = target
         if current == 0 and layer.get("trace", 0):
             draws.append((begin, min(begin + layer["trace"], end)))
         current = target

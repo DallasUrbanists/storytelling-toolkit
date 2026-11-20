@@ -77,7 +77,7 @@ class MapleStyleTests(unittest.TestCase):
         self.assertEqual(callout["backing_x_padding"], 0.00075)
         self.assertEqual(route["route_labels"], {"uppercase": True, "corner": 0, "x_padding": 0.0015})
         self.assertEqual(route["trace"], 15)
-        self.assertEqual(road, {"kind": "route"})
+        self.assertEqual(road, {"kind": "route", "opening_visible": True})
         check_route_labels(route["route_labels"], "Rail")
         with self.assertRaisesRegex(ValueError, "route label x_padding"):
             check_route_labels({"x_padding": -1}, "Rail")

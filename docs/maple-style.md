@@ -9,7 +9,7 @@ Add `"style_preset": "maple"` at the top level of a story JSON to carry the fina
 | Transit tracing | For route layers with `route_labels`, 30 frames (one second at 30 fps) unless a layer or route specifies a duration |
 | Blender preview | Camera view at frame 1 with Rendered shading. The opening heading is visible on frame 1. Fully inactive map objects also stay hidden in Solid shading. |
 
-Padding values are fractions of the image's long edge. A callout is fully white at full opacity. In the shot's `layers` map, use `1` for active station callouts that should stay white. Use `delay` and `fade` on the callout layer for timed entrances. Set the opening basemap layers' `fade` to `0` if the map should be fully visible on frame 1.
+Padding values are fractions of the image's long edge. A callout is fully white at full opacity. In the shot's `layers` map, use `1` for active station callouts that should stay white. Use `delay` and `fade` on the callout layer for timed entrances. Static basemap layers that are active in the opening shot are fully visible on frame 1. Set `opening_visible` to `false` to use a layer's opening fade.
 
 ## Prepare the production
 
