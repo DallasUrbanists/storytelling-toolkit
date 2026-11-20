@@ -9,7 +9,8 @@ import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_story import (
-    TITLE_COLOR, TITLE_SIZE, caption, feature_polygons, link, map_fill, material, paint, scale_driver,
+    TITLE_COLOR, TITLE_SIZE, caption, feature_polygons, link, map_fill, material, municipality_data,
+    municipality_label, paint, scale_driver,
     stroke, title_position,
 )
 from story_config import FORMATS, bounds, frame_target, project
@@ -139,6 +140,12 @@ def add_shot(scene, directory, config, format_name, mode):
     all_points = [p for line in roads for p in line]
     ground = group(stage, "Geographic ground layers")
     context = config.get("context_lines")
+    municipalities = json.loads(scene.get("municipality_labels_json", "[]"))
+    if config.get("municipalities"):
+        layer = {"id": "municipalities", "features": read(directory / config["municipalities"])["features"]}
+        municipalities = list(municipality_data(layer, origin))
+    if not config.get("municipality_labels", True):
+        municipalities = []
     center = project(config["detail_center"], origin)
     fields = config.get("framing", {}).get(format_name, {})
     full_center, full_scale = frame_target(all_points, FORMATS[format_name], 1.45, min_scale=0)
@@ -155,7 +162,7 @@ def add_shot(scene, directory, config, format_name, mode):
         add_polygon(ground, data, origin, "Estimated walkshed frontage", "355e56", z + 0.015)
     paths = street_context_paths(directory, context, config.get("context_supplemental_lines", []), origin, extent)
     if paths:
-        ground_line(ground, "Street context", paths, "3f5560", 5, z + 0.05)
+        ground_line(ground, "Street context", paths, "3f5560", 5, z + (.009 if municipalities else .05))
     if config.get("zoning"):
         zoning = group(stage, "Optional | City zoning")
         add_polygon(zoning, read(directory / config["zoning"]), origin,
@@ -232,6 +239,11 @@ def add_shot(scene, directory, config, format_name, mode):
         layout.add_route(("street context", number), [(path, [])], 0)
     if overview_bounds is not None:
         layout.add_route(("walkshed boundary", 1), [(ring, []) for ring in rings], 0)
+    if municipalities:
+        cities = group(ground, "Municipality labels")
+        keys = [(1, 0), (max(1, first - 1), 0), (first, 1), (first + 28, 1), (first + 42, 0)]
+        for name, center, color, size, placement in municipalities:
+            municipality_label(cities, name, center, color, size, keys, camera, z + .012, [layout], placement)
     side, title_x, title_y, _, heading = title_position(
         FORMATS[format_name], layout, config.get("overview_title", "Walking catchment"),
         previous=scene.get("geographic_title_corner", "LEFT"),
