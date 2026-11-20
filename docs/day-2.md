@@ -36,8 +36,16 @@ For a shared GeoJSON, put an `id` in each feature's properties and pass those ID
 ### Shared transit paths and route badges
 
 - Set `interline: {"tolerance": 24, "spacing": 8}` on a transit layer. Put the routes to interline together in one GeoJSON layer with one feature per route. `tolerance` is the maximum matching distance in local projected meters. The builder looks for sustained, parallel alignment and eases the offset at joins and splits. `spacing` is center-to-center distance in pixels along the long render edge. Curve shape keys retain the source alignment and scale the separation with the camera.
-- Set `route_labels: {"duration": 60}` to show badges for 60 frames from each route reveal. Traced routes with intro badges start at the badge anchor and draw outward. Set `route_labels: {"windows": [[30, 90], [180, 220]]}` to control inclusive frame intervals directly, or use an empty windows array to hide badges. Set a per-feature `route_label_timing` object to override layer timing. Supply a short name or number in the GeoJSON `route_label` property, or `false` to hide that badge. In Blender, the backing, text, position and visibility keys are editable.
+- Set `route_labels: {"duration": 60}` to show badges for 60 frames from each route reveal. Traced transit routes start halfway along their longest path by length unless you supply a geographic origin. Set `route_labels: {"windows": [[30, 90], [180, 220]]}` to control inclusive frame intervals directly, or use an empty windows array to hide badges. Set a per-feature `route_label_timing` object to override layer timing. Supply a short name or number in the GeoJSON `route_label` property, or `false` to hide that badge. In Blender, the backing, text, position and visibility keys are editable.
 - Automatic placement scores the box and leader against nearby labels, the frame, and visible routes marked `interline`, `route_labels` or `avoid_labels: true`. It checks camera poses for the scenes where a callout is visible and uses the same offset through the moves. Review both orientations after rendering. Set `auto_place: false` on a callout feature to use its configured offset exactly.
+
+## Configure transit and callout styling
+
+Use `route_overrides` by GeoJSON feature ID to set `trace`, `trace_origin`, `direction`, `color` or `opacity` for one route. A route layer's `trace_origin` is a WGS 84 longitude/latitude pair that snaps to the closest point on each path. Additional disconnected parts draw later in the reveal. Direction selection accepts a stored GTFS headsign or direction ID, and the original geometry is used by default. Run `python tools/gtfs_directions.py --help` to attach directional geometry from GTFS.
+
+Set `backing_corner` to zero for square callout corners. Set `backing_x_padding` for horizontal padding. Both are fractions of the long render edge. Set `backing_color`, `leader_color` and `dot_color` independently.
+
+Follow the [Maple Avenue walkthrough](maple-transit-controls.md) to apply the controls to the reference project.
 
 ## Validate
 

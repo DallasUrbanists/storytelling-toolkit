@@ -83,6 +83,45 @@ def check_route_labels(options, name):
             raise ValueError(f"{name}: each route label window must be two increasing positive frames")
 
 
+def color_option(value, name):
+    if not isinstance(value, str) or len(value.removeprefix("#")) != 6 or any(
+            c not in "0123456789abcdefABCDEF" for c in value.removeprefix("#")):
+        raise ValueError(f"{name}: expected a six-digit hex color")
+
+
+def route_options(options, name, origin):
+    if "color" in options:
+        color_option(options["color"], name)
+    if "opacity" in options:
+        value = options["opacity"]
+        if type(value) not in (int, float) or not 0 <= value <= 1:
+            raise ValueError(f"{name}: opacity must be between 0 and 1")
+    if "trace" in options and (type(options["trace"]) is not int or options["trace"] < 0):
+        raise ValueError(f"{name}: trace must be a nonnegative integer frame count")
+    if "trace_origin" in options:
+        point = options["trace_origin"]
+        if (not isinstance(point, list) or len(point) != 2
+                or any(type(value) not in (int, float) for value in point)):
+            raise ValueError(f"{name}: trace_origin must be a [longitude, latitude] pair")
+        project(point, origin)
+
+
+def select_direction(feature, selector, name):
+    if selector in (None, "all"):
+        return feature
+    if not isinstance(selector, str):
+        raise ValueError(f"{name}: direction must be 'all', a GTFS direction ID or headsign")
+    options = feature.get("properties", {}).get("directions", [])
+    matches = [option for option in options if selector == option["direction_id"]
+               or selector.casefold() == option["headsign"].casefold()]
+    if len(matches) != 1:
+        names = ", ".join(f"{option['direction_id']} ({option['headsign']})" for option in options)
+        raise ValueError(f"{name}: direction {selector!r} needs one match. Available directions: {names or 'none'}")
+    result = dict(feature)
+    result["geometry"] = matches[0]["geometry"]
+    return result
+
+
 def read_story(path):
     path = Path(path)
     config = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -131,6 +170,30 @@ def read_story(path):
         ]
         if not layer["features"]:
             raise ValueError(f"{name}: no selected features")
+        if kind == "route":
+            route_options(layer, name, config["origin"])
+            overrides = layer.get("route_overrides", {})
+            if not isinstance(overrides, dict):
+                raise ValueError(f"{name}: route_overrides must be an object keyed by feature id")
+            ids = {feature.get("properties", {}).get("id") for feature in layer["features"]}
+            if set(overrides) - ids:
+                raise ValueError(f"{name}: unknown route IDs {sorted(set(overrides) - ids)}")
+            selected = []
+            for feature in layer["features"]:
+                fid = feature.get("properties", {}).get("id")
+                options = overrides.get(fid, {})
+                if not isinstance(options, dict) or set(options) - {"trace", "trace_origin", "direction", "color", "opacity"}:
+                    raise ValueError(f"{name}/{fid}: invalid route override")
+                route_options(options, f"{name}/{fid}", config["origin"])
+                selected.append(select_direction(feature, options.get("direction"), f"{name}/{fid}"))
+            layer["features"] = selected
+        if kind in {"callout", "station"}:
+            for option in ("backing_color", "leader_color", "dot_color"):
+                if option in layer:
+                    color_option(layer[option], f"{name}/{option}")
+            for option in ("backing_corner", "backing_x_padding"):
+                if option in layer and (type(layer[option]) not in (int, float) or not 0 <= layer[option] <= 0.1):
+                    raise ValueError(f"{name}: {option} must be between 0 and 0.1")
         for feature in layer["features"]:
             geometry = feature["geometry"]
             properties = feature.get("properties", {})
