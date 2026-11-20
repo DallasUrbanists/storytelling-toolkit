@@ -24,11 +24,20 @@
       "kind": "route",
       "file": "illustrative-story.geojson",
       "select": [
-        "route"
+        "route",
+        "parallel"
       ],
       "color": "ffd16b",
       "width": 7,
-      "trace": 24
+      "trace": 24,
+      "color_property": "color",
+      "interline": {
+        "spacing": 9,
+        "tolerance": 24
+      },
+      "route_labels": {
+        "duration": 41
+      }
     },
     {
       "id": "Example marker",
@@ -47,7 +56,9 @@
           0.03,
           0.035
         ]
-      }
+      },
+      "label_backing": true,
+      "auto_place": true
     },
     {
       "id": "Example landmark",

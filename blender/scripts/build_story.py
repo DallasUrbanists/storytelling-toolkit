@@ -9,7 +9,11 @@ from mathutils import Matrix, Vector
 from mathutils.geometry import delaunay_2d_cdt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from story_config import FORMATS, bounds, frame_target, layer_events, positions, project, read_story, schedule
+from story_layout import Placement, parallel_routes, place_callout, rect, samples
+from story_config import (
+    FORMATS, badge_keys, bounds, frame_target, layer_events, positions,
+    project, read_story, route_opacity_keys, route_starts, schedule,
+)
 
 
 def paint(color):
@@ -76,7 +80,7 @@ def spline(curve, points, cyclic=False):
     part.use_cyclic_u = cyclic
 
 
-def stroke(collection, name, paths, mat, width, at, camera=None, parent=None, draws=()):
+def stroke(collection, name, paths, mat, width, at, camera=None, parent=None, draws=(), seed=0):
     curve = bpy.data.curves.new(name, "CURVE")
     curve.dimensions = "3D"
     curve.bevel_resolution = 2
@@ -90,18 +94,20 @@ def stroke(collection, name, paths, mat, width, at, camera=None, parent=None, dr
         for begin, finish in draws:
             curve.bevel_factor_end = 0
             curve.keyframe_insert(data_path="bevel_factor_end", frame=max(1, begin - 1))
+            if seed and finish > begin:
+                curve.bevel_factor_end = seed
+                curve.keyframe_insert(data_path="bevel_factor_end", frame=begin)
             curve.bevel_factor_end = 1
             curve.keyframe_insert(data_path="bevel_factor_end", frame=finish)
-        if len(draws) > 1:
-            # Hold a completed trace until its next reset, when opacity is zero.
-            animation = curve.animation_data
-            strip = animation.action.layers[0].strips[0]
-            channels = strip.channelbag(animation.action_slot)
-            trace = channels.fcurves.find("bevel_factor_end")
-            completed = {finish for _, finish in draws[:-1]}
-            for key in trace.keyframe_points:
-                if key.co.x in completed:
-                    key.interpolation = "CONSTANT"
+        # Keep the outline complete until the next hidden reset frame.
+        animation = curve.animation_data
+        strip = animation.action.layers[0].strips[0]
+        channels = strip.channelbag(animation.action_slot)
+        trace = channels.fcurves.find("bevel_factor_end")
+        completed = {finish for _, finish in draws}
+        for key in trace.keyframe_points:
+            if key.co.x in completed:
+                key.interpolation = "CONSTANT"
     return link(collection, name, curve, at, parent)
 
 
@@ -181,9 +187,9 @@ def caption(collection, name, value, mat, size, at, parent, align="LEFT"):
     return link(collection, name, font, at, parent)
 
 
-def feature_polygons(geometry, origin):
+def feature_polygons(geometry, origin, show_holes=True):
     polygons = [geometry["coordinates"]] if geometry["type"] == "Polygon" else geometry["coordinates"]
-    return [[[project(point, origin) for point in ring] for ring in polygon] for polygon in polygons]
+    return [[[project(point, origin) for point in ring] for ring in (polygon if show_holes else polygon[:1])] for polygon in polygons]
 
 
 def raster_layer(collection, layer, keys, origin, z):
@@ -200,7 +206,7 @@ def raster_layer(collection, layer, keys, origin, z):
     link(collection, layer["id"], mesh, (0, 0, z))
 
 
-def callout(collection, layer, feature, origin, z, camera, format_name, keys, color):
+def callout(collection, layer, feature, origin, z, camera, format_name, keys, color, layouts):
     props = feature.get("properties", {})
     name = props.get("name", layer["id"])
     x, y = project(feature["geometry"]["coordinates"], origin)
@@ -215,8 +221,11 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
     radius = layer.get("radius", 0.0036)
     disk = [(radius * math.cos(i * math.tau / 24), radius * math.sin(i * math.tau / 24)) for i in range(24)]
     fill(collection, name + " | Anchor dot", [(disk, True)], main, (0, 0, 12), root)
-    offset = props.get("offsets", {}).get(format_name, layer.get("offsets", {}).get(format_name, [0.025, 0.023]))
-    dx, dy = offset
+    preferred = props.get("offsets", {}).get(format_name, layer.get("offsets", {}).get(format_name, [0.025, 0.023]))
+    size = layer.get("text_size", 0.017)
+    width, height = text_box(name, size, 0.005)
+    auto = props.get("auto_place", layer.get("auto_place", False))
+    dx, dy = place_callout(layouts, (x, y), preferred, width, height) if auto else preferred
     placement = link(collection, name + " | Label placement", at=(dx, dy, 0), parent=root)
     placement.empty_display_type = "PLAIN_AXES"
     placement.empty_display_size = 0.007
@@ -230,15 +239,204 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
             hook.vertex_indices_set([1, 2])
             hook.matrix_inverse = Matrix.Translation((-dx, -dy, line.location.z))
     direction = 1 if dx >= 0 else -1
-    size = layer.get("text_size", 0.017)
-    caption(collection, name + " | Label", name, white, size, (direction * 0.004, 0, 16), placement,
-            "LEFT" if direction == 1 else "RIGHT")
+    if layer.get("label_backing", False):
+        text = material(name + " | Text", contrasting_text(color), keys, opacity)
+        box_x = direction * width / 2
+        panel(collection, name + " | Label backing", main, width, height, (box_x, 0, 13), placement)
+        caption(collection, name + " | Label", name, text, size, (box_x, 0, 16), placement, "CENTER")
+    else:
+        caption(collection, name + " | Label", name, white, size, (direction * 0.004, 0, 16), placement,
+                "LEFT" if direction == 1 else "RIGHT")
 
 
-def add_layer(collection, layer, keys, draws, config, z, camera, format_name, mask_bounds):
+def panel(collection, name, mat, width, height, at, parent):
+    x, y, r = width / 2, height / 2, min(0.003, height / 4)
+    path = [(-x + r, -y), (x - r, -y), (x, -y + r), (x, y - r),
+            (x - r, y), (-x + r, y), (-x, y - r), (-x, -y + r)]
+    return fill(collection, name, [(path, True)], mat, at, parent)
+
+
+def text_box(value, size, padding):
+    units = sum(0.33 if char in " ilI.,:/!" else 0.92 if char in "MWmw" else 0.62 for char in value)
+    return units * size + 2 * padding, size * 1.05 + padding
+
+
+def contrasting_text(color):
+    light = sum(v * k for v, k in zip(paint(color), (0.2126, 0.7152, 0.0722)))
+    return "13232f" if light > 0.24 else "f1f7fc"
+
+
+def route_paths(layer, origin):
+    groups = []
+    for feature in layer["features"]:
+        geometry = feature["geometry"]
+        lines = [geometry["coordinates"]] if geometry["type"] == "LineString" else geometry["coordinates"]
+        groups.append([[project(point, origin) for point in line] for line in lines])
+    if "interline" in layer:
+        return parallel_routes(groups, layer["interline"].get("tolerance", 28))
+    if "route_labels" in layer:
+        groups = [[samples(line, 35) for line in paths] for paths in groups]
+    return [[(line, []) for line in paths] for paths in groups]
+
+
+def lane_spacing(layer):
+    return layer.get("interline", {}).get("spacing", layer.get("width", 5) + 2) / 1920
+
+
+def choose_badge(packed, layout, owner, width, height, separation):
+    best = None
+    for part, (path, offsets) in enumerate(packed):
+        last = None
+        for i in range(1, len(path) - 1):
+            vx, vy = offsets[i] if offsets else (0, 0)
+            x, y = layout.screen(path[i])
+            x, y = x + vx * separation, y + vy * separation
+            if last and math.hypot(x - last[0], y - last[1]) < 0.010:
+                continue
+            if not (layout.frame[0] < x < layout.frame[2] and layout.frame[1] < y < layout.frame[3]):
+                continue
+            last = (x, y)
+            for dx, dy in ((0, 0), (-0.039, 0), (0.039, 0), (0, -0.027), (0, 0.027),
+                           (-0.043, 0.027), (0.043, -0.027)):
+                box = rect((x + dx, y + dy), width + 0.010, height + 0.010)
+                leader = [((x, y), (x + dx, y + dy))] if dx or dy else []
+                cost = layout.score(box, leader, owner=owner) + math.hypot(x, y) * 26 + part * 4
+                cost += 35 if leader else 0
+                if best is None or cost < best[0]:
+                    best = cost, part, i, box, (dx, dy), leader
+    return best
+
+
+def interline_stroke(obj, packed, camera, separation, scale):
+    if not any(offsets for _, offsets in packed):
+        return
+    obj.shape_key_add(name="Source alignment")
+    key = obj.shape_key_add(name="Parallel alignment")
+    for item, (point, offset) in zip(key.data, (
+            (point, offset) for path, offsets in packed for point, offset in zip(path, offsets))):
+        item.co = (point[0] + offset[0] * separation * scale, point[1] + offset[1] * separation * scale, 0)
+    scale_driver(key, "value", camera, 1 / scale)
+
+
+def route_badge(collection, label, point, offset, separation, color, timing, size, width, height, z, camera, shift):
+    root = link(collection, label + " | Badge anchor", at=(*point, z))
+    for axis in (0, 1):
+        scale_driver(root, "scale", camera, 1, axis)
+        delta = offset[axis] * separation
+        if delta:
+            scale_driver(root, "location", camera, delta, axis)
+            root.animation_data.drivers.find("location", index=axis).driver.expression += f" + ({point[axis]:.12g})"
+    static = [(1, 1)]
+    rim = material(label + " | Badge rim", "162733", static)
+    main = material(label + " | Badge", color, static)
+    text = material(label + " | Badge text", contrasting_text(color), static)
+    badge = link(collection, label + " | Badge placement", at=(*shift, 0), parent=root)
+    parts = [
+        panel(collection, label + " | Badge rim", rim, width + 0.0025, height + 0.0025, (0, 0, 1), badge),
+        panel(collection, label + " | Badge backing", main, width, height, (0, 0, 3), badge),
+        caption(collection, label + " | Route label", label, text, size, (0, 0, 5), badge, "CENTER"),
+    ]
+    if any(shift):
+        tether = stroke(collection, label + " | Route badge tether", [[(0, 0), shift]], main,
+                        0.00115, (0, 0, 0), parent=root)
+        hook = tether.modifiers.new("Follow badge placement", "HOOK")
+        hook.object = badge
+        hook.vertex_indices_set([1])
+        hook.matrix_inverse = Matrix.Translation((-shift[0], -shift[1], 0))
+        parts.append(tether)
+    for obj in parts:
+        for frame, visible in timing.items():
+            obj.hide_render = not visible
+            obj.hide_viewport = not visible
+            for field in ("hide_render", "hide_viewport"):
+                obj.keyframe_insert(data_path=field, frame=frame)
+
+
+def street_label(collection, feature, paths, keys, layer, camera, layout, z, origin):
+    props = feature.get("properties", {})
+    name = props.get("name", layer["id"])
+    size = layer.get("text_size", 0.015)
+    width, height = text_box(name, size, 0.003)
+    near = project(props["near"], origin) if "near" in props else paths[0][0][0]
+    preferred = layout.screen(near)
+    candidates = []
+    for path, _ in paths:
+        path = samples(path, layout.scale * 0.013)
+        for a, point, b in zip(path, path[1:], path[2:]):
+            sx, sy = layout.screen(point)
+            angle = math.atan2(b[1] - a[1], b[0] - a[0])
+            angle = (angle + math.pi / 2) % math.pi - math.pi / 2
+            cos, sin = math.cos(angle), math.sin(angle)
+            box = rect((sx, sy), abs(width * cos) + abs(height * sin), abs(width * sin) + abs(height * cos))
+            distance = math.hypot(sx - preferred[0], sy - preferred[1])
+            cost = layout.score(box) + distance * 650
+            candidates.append((cost, point, angle, box))
+    if not candidates:
+        return
+    _, point, angle, box = min(candidates)
+    layout.boxes.append(box)
+    root = link(collection, name + " | Street label anchor", at=(*point, z))
+    root.rotation_euler.z = angle
+    for axis in (0, 1):
+        scale_driver(root, "scale", camera, 1, axis)
+    halo = material(name + " | Halo", "152733", keys)
+    ink = material(name + " | Street label", layer.get("color", "d8e6e9"), keys)
+    backing = caption(collection, name + " | Halo", name, halo, size, (0, 0, 1), root, "CENTER")
+    backing.data.offset = 0.00075
+    caption(collection, name + " | Street label", name, ink, size, (0, 0, 3), root, "CENTER")
+
+
+def styled_routes(collection, layer, packed, keys, draws, camera, layout, z, end, scale):
+    label_options = layer.get("route_labels")
+    width, separation = layer.get("width", 5), lane_spacing(layer)
+    starts = route_starts(keys, draws)
+    if label_options is not None:
+        keys = route_opacity_keys(keys, draws)
+    for number, (feature, paths) in enumerate(zip(layer["features"], packed), 1):
+        props = feature.get("properties", {})
+        name = props.get("name", f"{layer['id']} {number}")
+        color = props.get(layer.get("color_property", ""), layer.get("color", "4de2c1"))
+        mat = material(name, color, keys, layer.get("opacity", 1))
+        choice, starts_with_route = None, False
+        if label_options is not None and props.get("route_label", True) is not False:
+            options = {**label_options, **props.get("route_label_timing", {})}
+            label = str(props.get("route_label", props.get("id", name)))
+            timing = badge_keys(options, starts, end)
+            starts_with_route = any(timing.get(frame, 0) for frame in starts)
+            if any(timing.values()):
+                size = options.get("size", 0.013)
+                w, h = text_box(label, size, 0.0045)
+                choice = choose_badge(paths, layout, (layer["id"], number), w, h, separation)
+                if choice:
+                    _, part, i, box, shift, leader = choice
+                    layout.boxes.append(box)
+                    layout.leaders.extend(leader)
+                    path, offsets = paths[part]
+                    offset = offsets[i] if offsets else (0, 0)
+                    route_badge(collection, label, path[i], offset, separation, color,
+                                timing, size, w, h, z + 320, camera, shift)
+                    if draws and starts_with_route:
+                        paths = list(paths)
+                        paths[part:part + 1] = [(path[:i + 1][::-1], offsets[:i + 1][::-1]),
+                                                (path[i:], offsets[i:])]
+        obj = stroke(collection, name, [path for path, _ in paths], mat, width, (0, 0, z),
+                     camera=camera, draws=draws, seed=0.084 if choice and starts_with_route else 0)
+        interline_stroke(obj, paths, camera, separation, scale)
+
+
+def add_layer(collection, layer, keys, draws, config, z, camera, format_name, mask_bounds,
+              layouts, packed, scale, end):
+    layout = layouts[0]
     kind, name, origin = layer["kind"], layer["id"], config["origin"]
     if kind == "raster":
         raster_layer(collection, layer, keys, origin, z)
+        return
+    if kind == "street_labels":
+        for feature, paths in zip(layer["features"], packed):
+            street_label(collection, feature, paths, keys, layer, camera, layout, z, origin)
+        return
+    if kind == "route" and ("interline" in layer or "route_labels" in layer):
+        styled_routes(collection, layer, packed, keys, draws, camera, layout, z, end, scale)
         return
     colors = {}
     shade_polygons = []
@@ -247,14 +445,14 @@ def add_layer(collection, layer, keys, draws, config, z, camera, format_name, ma
         label = properties.get("name", f"{name} {number}")
         color = properties.get(layer.get("color_property", ""), layer.get("color", "4de2c1"))
         if kind in {"callout", "station"}:
-            callout(collection, layer, feature, origin, z, camera, format_name, keys, color)
+            callout(collection, layer, feature, origin, z, camera, format_name, keys, color, layouts)
             continue
         if color not in colors:
             colors[color] = material(name + " | " + color, color, keys, layer.get("opacity", 1))
         width = layer.get("width", 5)
         paths = []
         if kind == "boundary":
-            polygons = feature_polygons(geometry, origin)
+            polygons = feature_polygons(geometry, origin, layer.get("show_holes", True))
             shade_polygons.extend(polygons)
             if layer.get("fill"):
                 interior = material(label + " | Translucent fill", color, keys, layer["fill"])
@@ -364,11 +562,28 @@ def build(config, format_name):
     camera.data.passepartout_alpha = 0.95
     scene.camera = camera
     animate_camera(camera, steps, timings, frames, height, scene)
-    for index, layer in enumerate(layers.values(), 1):
-        collection = bpy.data.collections.new(layer["id"])
+    packed = {name: route_paths(layer, config["origin"]) for name, layer in layers.items()
+              if layer["kind"] in {"route", "street_labels"}
+              and ("interline" in layer or "route_labels" in layer or layer["kind"] == "street_labels"
+                   or layer.get("avoid_labels"))}
+    layouts = [Placement(pose, dimensions) for pose in frames]
+    for step, layout in zip(steps, layouts):
+        for name, paths in packed.items():
+            layer = layers[name]
+            if layer["kind"] == "street_labels" or not step["layers"].get(name):
+                continue
+            for number, path in enumerate(paths, 1):
+                layout.add_route((name, number), path, lane_spacing(layer))
+    stacking = {name: index * 400 for index, name in enumerate(layers, 1)}
+    order = {"route": 0, "boundary": 0, "raster": 0, "street_labels": 1, "callout": 2, "station": 2}
+    for layer in sorted(layers.values(), key=lambda item: order[item["kind"]]):
+        name = layer["id"]
+        collection = bpy.data.collections.new(name)
         scene.collection.children.link(collection)
         keys, draws = layer_events(layer, steps, timings)
-        add_layer(collection, layer, keys, draws, config, index * 400, camera, format_name, mask_bounds)
+        active_layouts = [layout for step, layout in zip(steps, layouts) if step["layers"].get(name)]
+        add_layer(collection, layer, keys, draws, config, stacking[name], camera, format_name, mask_bounds,
+                  active_layouts or layouts[:1], packed.get(name), scale, scene.frame_end)
     title_cards(scene, camera, steps, timings, dimensions, config)
     for screen in bpy.data.screens:
         for area in screen.areas:

@@ -6,7 +6,7 @@
       "properties": {
         "id": "area",
         "name": "Illustrative boundary",
-        "source": "SYNTHETIC - illustration only"
+        "source": "SYNTHETIC \u00e2\u20ac\u201d illustration only"
       },
       "geometry": {
         "type": "Polygon",
@@ -63,7 +63,9 @@
       "properties": {
         "id": "route",
         "name": "Illustrative route",
-        "source": "SYNTHETIC - illustration only"
+        "source": "SYNTHETIC \u00e2\u20ac\u201d illustration only",
+        "route_label": "A",
+        "color": "ffd16b"
       },
       "geometry": {
         "type": "MultiLineString",
@@ -104,7 +106,7 @@
       "properties": {
         "id": "station",
         "name": "Illustrative station",
-        "source": "SYNTHETIC - illustration only"
+        "source": "SYNTHETIC \u00e2\u20ac\u201d illustration only"
       },
       "geometry": {
         "type": "Point",
@@ -119,13 +121,56 @@
       "properties": {
         "id": "landmark",
         "name": "Illustrative landmark",
-        "source": "SYNTHETIC - illustration only"
+        "source": "SYNTHETIC \u00e2\u20ac\u201d illustration only"
       },
       "geometry": {
         "type": "Point",
         "coordinates": [
           -96.819,
           32.792
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "parallel",
+        "name": "Illustrative parallel route",
+        "route_label": "B",
+        "color": "7fe3f8",
+        "source": "SYNTHETIC - illustration only",
+        "route_label_timing": {
+          "windows": [
+            [
+              92,
+              112
+            ]
+          ]
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -96.832,
+            32.791
+          ],
+          [
+            -96.829,
+            32.793
+          ],
+          [
+            -96.823,
+            32.791
+          ],
+          [
+            -96.818,
+            32.788
+          ],
+          [
+            -96.811,
+            32.791
+          ]
         ]
       }
     }

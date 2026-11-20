@@ -12,7 +12,7 @@ blender --background --factory-startup --python-exit-code 1 --python blender/scr
 blender --background scratch/illustrative-portrait.blend -o //portrait-#### -f 30,105,180
 ```
 
-The output file path must be new. Save creative edits in the generated project and regenerate to a new file when geographic inputs change. The portrait project uses 1080 x 1920 and the landscape project uses 1920 x 1080. Both run at 30 fps.
+The output file path must be new. Save creative edits in the generated project and regenerate to a new file when geographic inputs change. The portrait project uses 1080 × 1920 and the landscape project uses 1920 × 1080. Both run at 30 fps.
 
 In Blender, **Numpad 0** switches to the camera view. Scrub the Timeline and look for named focus markers. Use Rendered viewport shading to see material fades. Select a boundary curve in the Outliner and enter Edit Mode to adjust control points. The corresponding fill and outside mask are separate meshes and need to be rebuilt if the polygon changes. For callouts, select **Label placement** in the Outliner and edit its local X and Y to move the text and the leader elbow together. Select the **Label** text object and enter Edit Mode to change the wording. The **Geographic anchor** moves all parts of a callout. The camera object holds location keys, and the camera data holds **Orthographic Scale** keys. Select the appropriate data block when editing their keyframes.
 
@@ -25,12 +25,19 @@ In Blender, **Numpad 0** switches to the camera view. Scrub the Timeline and loo
 
 | Layer kind | Input and controls |
 | --- | --- |
-| `boundary` | Polygon or MultiPolygon. Set `color`, `width` in pixels along the long image edge, `fill` opacity and optional `outside_dim` opacity. Import topology-valid rings. |
-| `route` | LineString or MultiLineString. Set `color`, `width`, and optionally `color_property` for per-feature hex colors. Use one ordered LineString for a connected study corridor and MultiLineString for genuinely discontinuous lines. Each part of a multipart line draws on concurrently. |
-| `callout`, `station` | Point features with a `name`. Set `radius`, `text_size` and `offsets` by orientation. Offsets are fractions of the image's long edge, measured east and north from the anchor. Feature offsets override layer defaults. |
+| `boundary` | Polygon or MultiPolygon. Set `color`, `width` in pixels along the long image edge, `fill` opacity and optional `outside_dim` opacity. Import topology-valid rings. Set `show_holes: false` for a solid outer silhouette in the outline, fill and outside mask. The default preserves interior cutouts. |
+| `route` | LineString or MultiLineString. Set `color`, `width`, and optionally `color_property` for per-feature hex colors. Use one ordered LineString for a connected study corridor and MultiLineString for genuinely discontinuous lines. Each part of a multipart line draws on concurrently. Set `interline` to offset sustained shared segments. |
+| `callout`, `station` | Point features with a `name`. Set `radius`, `text_size` and `offsets` by orientation. Offsets are fractions of the image’s long edge, measured east and north from the anchor. Feature offsets override layer defaults. Set `label_backing: true` for a padded box in the leader color and `auto_place: true` to use the offsets as starting preferences for collision scoring. |
+| `street_labels` | Road centerlines with a `name` and optional longitude/latitude `near` to indicate the preferred section. The builder sets upright text along a nearby segment. Set `color` and `text_size`. |
 | `raster` | Optional flat backdrop. Export a north-up QGIS image in WGS 84, set matching `bounds` and put the raster first in the layer list. The image is packed into the .blend. |
 
-For a shared GeoJSON, put an `id` in each feature's properties and pass those IDs through the layer's optional `select` array. Layers later in the JSON draw over layers earlier in the file. Review labels after each orientation's camera fit. Geographic anchoring and screen-sized offsets keep the placement predictable, and final collisions can be corrected in Blender or in the configuration.
+For a shared GeoJSON, put an `id` in each feature's properties and pass those IDs through the layer's optional `select` array. Layers later in the JSON draw over layers earlier in the file. Put a wide study corridor before the transit layers if the lines should remain visible above it.
+
+### Shared transit paths and route badges
+
+- Set `interline: {"tolerance": 24, "spacing": 8}` on a transit layer. Put the routes to interline together in one GeoJSON layer with one feature per route. `tolerance` is the maximum matching distance in local projected meters. The builder looks for sustained, parallel alignment and eases the offset at joins and splits. `spacing` is center-to-center distance in pixels along the long render edge. Curve shape keys retain the source alignment and scale the separation with the camera.
+- Set `route_labels: {"duration": 60}` to show badges for 60 frames from each route reveal. Traced routes with intro badges start at the badge anchor and draw outward. Set `route_labels: {"windows": [[30, 90], [180, 220]]}` to control inclusive frame intervals directly, or use an empty windows array to hide badges. Set a per-feature `route_label_timing` object to override layer timing. Supply a short name or number in the GeoJSON `route_label` property, or `false` to hide that badge. In Blender, the backing, text, position and visibility keys are editable.
+- Automatic placement scores the box and leader against nearby labels, the frame, and visible routes marked `interline`, `route_labels` or `avoid_labels: true`. It checks camera poses for the scenes where a callout is visible and uses the same offset through the moves. Review both orientations after rendering. Set `auto_place: false` on a callout feature to use its configured offset exactly.
 
 ## Validate
 
