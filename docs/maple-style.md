@@ -4,17 +4,17 @@ Add `"style_preset": "maple"` at the top level of a story JSON to carry the fina
 
 | Element | Preset |
 | --- | --- |
-| Landmark and station callouts | White backing, leader, casing and anchor dot, square corners, automatic placement, and `0.00075` horizontal padding per side |
-| Rail and bus badges | For route layers with `route_labels`, uppercase text, square backing and rim, and `0.0015` horizontal padding per side. Route colors come from the layer or route data. |
+| Landmark and station callouts | White backing, leader, casing and anchor dot, square corners, automatic placement, and one average glyph width of horizontal padding per side |
+| Rail and bus badges | Uppercase text with square backings and rims. Rail badges use one average glyph width per side. Layers marked `"route_mode": "bus"` use lavender `#A695E9` for lines, tethers and badges. Rail colors follow the layer or route data. |
 | Transit tracing | For route layers with `route_labels`, 30 frames (one second at 30 fps) unless a layer or route specifies a duration |
 | Blender preview | Camera view at frame 1 with Rendered shading. The opening heading is visible on frame 1. Fully inactive map objects also stay hidden in Solid shading. |
 
-Padding values are fractions of the image's long edge. A callout is fully white at full opacity. In the shot's `layers` map, use `1` for active station callouts that should stay white. Use `delay` and `fade` on the callout layer for timed entrances. Static basemap layers that are active in the opening shot are fully visible on frame 1. Set `opening_visible` to `false` to use a layer's opening fade.
+Tag route layers with `"route_mode": "bus"` or `"route_mode": "rail"`. An explicit layer `uniform_color` replaces the preset's lavender and takes precedence over individual route colors. The default bus badge has a numeric padding of 0.0015 per side. Use `"character"` for measured, symmetric horizontal padding or a number as a fraction of the image's long edge. Badge placement scores visible routes, labels, leaders and screen edges in each pose where the badge is shown. Bus badges render above the routes even when a crossing cannot be avoided. A callout is fully white at full opacity. In the shot's `layers` map, use `1` for active station callouts that should stay white. Use `delay` and `fade` on the callout layer for timed entrances. Static basemap layers that are active in the opening shot are fully visible on frame 1. Set `opening_visible` to `false` to use a layer's opening fade.
 
 ## Prepare the production
 
 - Use [the geographic story guide](day-2.md) for shared transit alignment, badge reveal timing, street names along road centerlines, and collision-aware label placement. Set `show_holes: false` on a layer when a solid boundary silhouette is desired. Put a wide corridor layer beneath transit in the JSON layer order.
-- Keep geographic origins and transit directions in the project configuration. Verify them against that project's GeoJSON and GTFS. In the Maple example, the bus origin was `[-96.833204, 32.813602]` at SWMD/Parkland. Each route snaps to its own path. Select departures by route ID and GTFS direction or headsign. Route 207 toward Downtown and 230 toward DFW were editorial choices for that example. [Maple transit controls](maple-transit-controls.md)
+- Keep geographic origins and transit directions in the project configuration. Verify them against that project's GeoJSON and GTFS. In the Maple example, the bus origin was `[-96.833204, 32.813602]` at SWMD/Parkland. Each route snaps to its own path. Select departures by route ID and GTFS direction or headsign. A route layer can set a default `direction`, and `route_overrides` can select an exception or use `"all"` for the combined alignment. Use station-specific headsigns to decide which direction to draw. Route 207 toward Downtown and 230 toward DFW were editorial choices for that example. [Maple transit controls](maple-transit-controls.md)
 
 ## Edit and preview in Blender
 
