@@ -221,7 +221,7 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
     dot_color = layer.get("dot_color", color)
     ink = {value: material(f"{name} | {value}", value, keys, opacity)
            for value in dict.fromkeys((backing_color, leader_color, dot_color))}
-    white = material(name + " | White casing", "f1f7fc", keys, opacity)
+    white = material(name + " | White casing", layer.get("casing_color", "f1f7fc"), keys, opacity)
     radius = layer.get("radius", 0.0036)
     disk = [(radius * math.cos(i * math.tau / 24), radius * math.sin(i * math.tau / 24)) for i in range(24)]
     fill(collection, name + " | Anchor dot", [(disk, True)], ink[dot_color], (0, 0, 12), root)
@@ -329,7 +329,7 @@ def interline_stroke(obj, packed, camera, separation, scale):
     scale_driver(key, "value", camera, 1 / scale)
 
 
-def route_badge(collection, label, point, offset, separation, color, timing, size, width, height, z, camera, shift):
+def route_badge(collection, label, point, offset, separation, color, timing, size, width, height, z, camera, shift, corner=0.003):
     root = link(collection, label + " | Badge anchor", at=(*point, z))
     for axis in (0, 1):
         scale_driver(root, "scale", camera, 1, axis)
@@ -343,8 +343,8 @@ def route_badge(collection, label, point, offset, separation, color, timing, siz
     text = material(label + " | Badge text", contrasting_text(color), static)
     badge = link(collection, label + " | Badge placement", at=(*shift, 0), parent=root)
     parts = [
-        panel(collection, label + " | Badge rim", rim, width + 0.0025, height + 0.0025, (0, 0, 1), badge),
-        panel(collection, label + " | Badge backing", main, width, height, (0, 0, 3), badge),
+        panel(collection, label + " | Badge rim", rim, width + 0.0025, height + 0.0025, (0, 0, 1), badge, corner=corner),
+        panel(collection, label + " | Badge backing", main, width, height, (0, 0, 3), badge, corner=corner),
         caption(collection, label + " | Route label", label, text, size, (0, 0, 5), badge, "CENTER"),
     ]
     if any(shift):
@@ -416,10 +416,12 @@ def styled_routes(collection, layer, packed, keys, draws, camera, layout, z, end
         if label_options is not None and props.get("route_label", True) is not False:
             options = {**label_options, **props.get("route_label_timing", {})}
             label = str(props.get("route_label", props.get("id", name)))
+            if options.get("uppercase", False):
+                label = label.upper()
             timing = badge_keys(options, starts, end)
             if any(timing.values()):
                 size = options.get("size", 0.013)
-                w, h = text_box(label, size, 0.0045)
+                w, h = text_box(label, size, 0.0045, options.get("x_padding"))
                 choice = choose_badge(paths, layout, (layer["id"], number), w, h, separation)
                 if choice:
                     _, part, i, box, shift, leader = choice
@@ -428,7 +430,7 @@ def styled_routes(collection, layer, packed, keys, draws, camera, layout, z, end
                     path, offsets = paths[part]
                     offset = offsets[i] if offsets else (0, 0)
                     route_badge(collection, label, path[i], offset, separation, color,
-                                timing, size, w, h, z + 320, camera, shift)
+                                timing, size, w, h, z + 320, camera, shift, corner=options.get("corner", 0.003))
         coordinate = override.get("trace_origin", layer.get("trace_origin"))
         remaining = []
         if route_draws:
@@ -530,7 +532,8 @@ def title_cards(scene, camera, steps, timings, dimensions, metadata):
     left, top = -width / 2 + 0.033, height / 2 - 0.045
     for step, (_, arrival, end) in zip(steps, timings):
         name = step["title"]
-        keys = {1: 0, max(1, arrival - 1): 0, arrival + min(8, (end - arrival) // 3): 1}
+        keys = ({1: 1} if arrival == 1 else
+                {1: 0, arrival - 1: 0, arrival + min(8, (end - arrival) // 3): 1})
         if end < timings[-1][2]:
             keys[max(arrival, end - min(9, (end - arrival) // 3))] = 1
             keys[end] = 0
@@ -548,6 +551,47 @@ def title_cards(scene, camera, steps, timings, dimensions, metadata):
         footer = material("Sources", "adc4cd", [(1, 1)])
         caption(collection, "Map sources", metadata["credit"], footer, 0.0105,
                 (left, -height / 2 + 0.021, 2), anchor)
+
+
+def opacity_curve(material):
+    tree = material.node_tree
+    if not tree or not tree.animation_data or not tree.animation_data.action:
+        return None
+    node = next((node for node in tree.nodes if node.label == "Layer opacity"), None)
+    if node is None:
+        return None
+    animation = tree.animation_data
+    channels = animation.action.layers[0].strips[0].channelbag(animation.action_slot)
+    return channels.fcurves.find(node.inputs[0].path_from_id("default_value"))
+
+
+def prepare_preview(scene):
+    # Solid shading ignores node transparency. Mirror the zero-opacity
+    # intervals onto viewport visibility while the material handles fades.
+    curves = {mat: opacity_curve(mat) for mat in bpy.data.materials}
+    visibility = {
+        mat: [curve.evaluate(frame) > 1e-6 for frame in range(1, scene.frame_end + 1)]
+        for mat, curve in curves.items() if curve is not None
+    }
+    for obj in scene.objects:
+        materials = [slot.material for slot in obj.material_slots]
+        if not materials or any(mat not in visibility for mat in materials):
+            continue
+        animation = obj.animation_data
+        if animation and animation.action:
+            continue  # Route badges already have viewport visibility keys.
+        previous = None
+        for frame, states in enumerate(zip(*(visibility[mat] for mat in materials)), 1):
+            hidden = not any(states)
+            if hidden != previous:
+                obj.hide_viewport = hidden
+                obj.keyframe_insert(data_path="hide_viewport", frame=frame)
+                previous = hidden
+    for screen in bpy.data.screens:
+        for area in screen.areas:
+            if area.type == "VIEW_3D":
+                area.spaces.active.shading.type = "RENDERED"
+    scene.frame_set(scene.frame_start)
 
 
 def build(config, format_name):
@@ -613,7 +657,7 @@ def build(config, format_name):
                 space.overlay.show_overlays = False
                 space.shading.color_type = "MATERIAL"
                 space.shading.background_type = "WORLD"
-    scene.frame_set(min(timings[0][2], 75))
+    prepare_preview(scene)
     return scene
 
 
