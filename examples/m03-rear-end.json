@@ -1,0 +1,28 @@
+{
+  "id": "M03-rear-end-sample",
+  "description": "Synthetic motion and dimensions, for technical review",
+  "roadway": "illustrative-roadway.json",
+  "roadway_overrides": {"driveway_shifts_m": {"left:1": -15.9}},
+  "layout": "existing",
+  "frames": 350,
+  "camera": {
+    "portrait": {"target": [0,-12,0],"scale": 52,"bearing": 8,"tilt": 38},
+    "landscape": {"target": [0,-12,0],"scale": 61,"bearing": 47,"tilt": 34}
+  },
+  "actors": [
+    {"id":"Red follower","model":"sedan","role":"primary","poses":[
+      [1,1.68,-30,0,0,0],[80,1.68,-15,0,0,0],[120,1.68,-5,0,0,0],
+      [145,1.68,-0.3,0,0,0],[150,1.68,0.65,0,0,0],[154,1.68,0.83,0,0,0],
+      [172,1.68,1.39,0,0,0],[183,1.68,1.59,0,0,0]]},
+    {"id":"Yellow turning driver","model":"sedan","role":"secondary","poses":[
+      [1,1.68,-13,0,0,0],[85,1.68,1.8,0,0,0],[110,1.68,4.65,0,0,0],
+      [124,1.68,5,0,0,0],[150,1.68,5,0,0,0],[154,1.68,5.2,0,0,0],
+      [172,1.68,5.86,0,0,0],[183,1.68,6.1,0,0,0]]},
+    {"id":"Gray opposing driver","model":"SUV","role":"context","poses":[
+      [1,-1.68,27,0,180,0],[150,-1.68,-7,0,180,0],[191,-1.68,-30,0,180,0]]}
+  ],
+  "impacts": [
+    {"actor":"Red follower","other":"Yellow turning driver","frame":150,
+     "surface":"front","other_surface":"rear","crumple_m":0.24,"smoke_blocks":7}
+  ]
+}
