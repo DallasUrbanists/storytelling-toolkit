@@ -33,10 +33,17 @@ Import both sets of shots into Resolve Free. Use two timelines at 30 fps, each w
 
 Use a segment register with WGS 84 start and end positions, configuration IDs, facility, buffer width when documented, turn treatments, bus stops, source, sheet reference and confidence. Use `roadway_model.validate_segments` to catch invalid or unreferenced records. Keep standard bike lanes, buffered examples and intersection transitions separate. For an illustrative treatment with no defensible project limits, keep the endpoints null. Keep citywide dated documents distinct from final engineering plans.
 
+To create an overhead shot, supply GeoJSON linework for the study corridor and optional reference streets. The overview JSON takes `origin`, relative `corridor` and `context` files, a `transition_anchor`, `configurations` as a list of cross-section IDs, and the `segments` register. Supply `callouts` with an editable `label`, inclusive `frames`, and an optional WGS 84 `anchor`. Leave the callout anchor null for an improvement whose location remains unresolved. The base study line shows the corridor rather than engineering lane offsets.
+
+```powershell
+blender -b C:/Production/roadway-landscape.blend --python-exit-code 1 --python blender/scripts/build_corridor_overview.py -- --config C:/Production/corridor-planning.json --format landscape --output C:/Production/roadway-with-overview.blend
+```
+
 ## Verification
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
+blender -b C:/Production/roadway-with-overview.blend --python-exit-code 1 --python tests/validate_roadway_blender.py
 ```
 
 The roadway-model tests cover lock and derivation metadata, width edits, invalid width and mapping rejection, and contiguous allocation at 101 progress samples. Use rendered visual QA for painted lines, titles, building occlusion and vehicle clearances.
