@@ -470,6 +470,25 @@ def place_route_badges(pending, camera, badge_z):
                     corner=options.get("corner", 0.003), text_center=text_center)
 
 
+def transit_casing(obj, collection, color, width):
+    outline = obj.copy()
+    outline.data = obj.data.copy()
+    outline.name = obj.name + " | Transit casing"
+    collection.objects.link(outline)
+    outline.location.z -= 1
+    ink = obj.data.materials[0].copy()
+    ink.diffuse_color = paint(color)
+    ink.node_tree.nodes["Emission"].inputs["Color"].default_value = ink.diffuse_color
+    outline.data.materials[0] = ink
+    curve = outline.data.animation_data
+    driver = curve.drivers.find("bevel_depth") if curve else None
+    if driver:
+        driver.driver.expression = f"({driver.driver.expression}) * {width:.9g}"
+    else:
+        outline.data.bevel_depth *= width
+    return outline
+
+
 def styled_routes(collection, layer, packed, keys, draws, camera, layouts, z, end, scale, config, pending):
     label_options = layer.get("route_labels")
     width, separation = layer.get("width", 5), lane_spacing(layer)
@@ -504,11 +523,15 @@ def styled_routes(collection, layer, packed, keys, draws, camera, layouts, z, en
         obj = stroke(collection, name, [path for path, _ in paths], mat, width, (0, 0, z),
                      camera=camera, draws=route_draws, seed=0.01 if route_draws else 0)
         interline_stroke(obj, paths, camera, separation, scale)
+        if layer.get("transit_casing"):
+            transit_casing(obj, collection, layer["transit_casing"], (width + 2) / width)
         if remaining:
             later = [(first + (last - first + 1) // 2, last) for first, last in route_draws]
             branch = stroke(collection, name + " | Additional paths", [path for path, _ in remaining],
                             mat, width, (0, 0, z), camera=camera, draws=later)
             interline_stroke(branch, remaining, camera, separation, scale)
+            if layer.get("transit_casing"):
+                transit_casing(branch, collection, layer["transit_casing"], (width + 2) / width)
 
 
 def municipality_data(layer, origin):
