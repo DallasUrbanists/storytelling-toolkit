@@ -25,7 +25,12 @@ def key_camera(camera, frame, target, scale, bearing, tilt, distance):
     if not math.isfinite(scale) or scale <= 0:
         raise ValueError("Orthographic scale must be positive")
     camera.rotation_mode = "QUATERNION"
-    camera.location, camera.rotation_quaternion = camera_pose(target, bearing, tilt, distance)
+    location, rotation = camera_pose(target, bearing, tilt, distance)
+    # Blender interpolates quaternion components. Keep adjacent keys on the same
+    # hemisphere when the bearing crosses a quaternion sign discontinuity.
+    if camera.rotation_quaternion.dot(rotation) < 0:
+        rotation.negate()
+    camera.location, camera.rotation_quaternion = location, rotation
     camera.data.ortho_scale = scale
     for path in ("location", "rotation_quaternion"):
         camera.keyframe_insert(data_path=path, frame=frame, group="Urban camera")
