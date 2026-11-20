@@ -155,7 +155,7 @@ def markings(col, anchors, slots, mats, length, morph_start, morph_end, end):
                     item = arrow(col, f"{phase} arrow | {element.id}", 0, distance,
                                  element.direction, mats["yellow" if element.kind == "turn" else "white"],
                                  strip, turn=element.kind == "turn")
-                    if element.kind == "turn":
+                    if element.kind == "turn" and element.direction == "both":
                         alternate = arrow(col, f"{phase} opposing turn | {element.id}", .06,
                                           distance+2.15, "reverse", mats["yellow"], strip, turn=True)
                         visible(alternate, max(first, morph_end-14), last, end)
