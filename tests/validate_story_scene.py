@@ -27,6 +27,12 @@ assert camera.animation_data.action and camera.data.animation_data.action
 timings = schedule(config["steps"])
 assert scene.frame_end == timings[-1][2]
 
+assert scene.frame_current == 1
+titles = bpy.data.collections["Screen titles"].objects
+assert not titles[config["steps"][0]["title"]].hide_viewport
+if len(config["steps"]) > 1:
+    assert titles[config["steps"][1]["title"]].hide_viewport
+
 
 def opacity(material):
     return next(node for node in material.node_tree.nodes if node.label == "Layer opacity").inputs[0].default_value
