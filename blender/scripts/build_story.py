@@ -233,6 +233,8 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
     preferred = props.get("offsets", {}).get(format_name, layer.get("offsets", {}).get(format_name, [0.025, 0.023]))
     size = layer.get("text_size", 0.017)
     width, height, text_center = label_box(name, size, 0.005, layer.get("backing_x_padding"))
+    weight = size * .035 if layer.get("text_weight") == "bold" else 0
+    width += 2 * weight
     auto = props.get("auto_place", layer.get("auto_place", False))
     dx, dy = place_callout(layouts, (x, y), preferred, width, height) if auto else preferred
     placement = link(collection, name + " | Label placement", at=(dx, dy, 0), parent=root)
@@ -253,10 +255,12 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
         box_x = direction * width / 2
         panel(collection, name + " | Label backing", ink[backing_color], width, height, (box_x, 0, 13),
               placement, corner=layer.get("backing_corner", 0.003))
-        caption(collection, name + " | Label", name, text, size, (box_x - text_center, 0, 16), placement, "CENTER")
+        label = caption(collection, name + " | Label", name, text, size, (box_x - text_center, 0, 16), placement, "CENTER")
+        label.data.offset = weight
     else:
-        caption(collection, name + " | Label", name, white, size, (direction * 0.004, 0, 16), placement,
+        label = caption(collection, name + " | Label", name, white, size, (direction * 0.004, 0, 16), placement,
                 "LEFT" if direction == 1 else "RIGHT")
+        label.data.offset = weight
 
 
 def panel(collection, name, mat, width, height, at, parent, corner=0.003):
