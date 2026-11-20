@@ -8,9 +8,12 @@ import sys
 import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_story import caption, feature_polygons, link, map_fill, material, paint, scale_driver, stroke
+from build_story import (
+    TITLE_COLOR, TITLE_SIZE, caption, feature_polygons, link, map_fill, material, paint, scale_driver,
+    stroke, title_position,
+)
 from story_config import FORMATS, bounds, frame_target, project
-from story_layout import overlap
+from story_layout import Placement, overlap
 from urban_camera import MODES, PRESETS, bake_visibility, key_camera, sample_subject
 from urban_massing import create_massing
 
@@ -223,10 +226,20 @@ def add_shot(scene, directory, config, format_name, mode):
     left = -.45 if format_name == "landscape" else -.45 * ratio
     top = .44 * ratio if format_name == "landscape" else .44
     bottom = -.44 * ratio if format_name == "landscape" else -.44
-    intro = material("Day 3 | walkshed title", "ebf5f2", [(first, 1), (first + 25, 1), (first + 43, 0)])
+    layout = Placement((full_center, full_scale), FORMATS[format_name])
+    layout.add_route(("study corridor", 1), [(path, []) for path in roads], 0)
+    for number, path in enumerate(paths):
+        layout.add_route(("street context", number), [(path, [])], 0)
+    if overview_bounds is not None:
+        layout.add_route(("walkshed boundary", 1), [(ring, []) for ring in rings], 0)
+    side, title_x, title_y, _, heading = title_position(
+        FORMATS[format_name], layout, config.get("overview_title", "Walking catchment"),
+        previous=scene.get("geographic_title_corner", "LEFT"),
+    )
+    intro = material("Day 3 | walkshed title", TITLE_COLOR, [(first, 1), (first + 25, 1), (first + 43, 0)])
     detail = material("Day 3 | detail title", "ebf5f2", [(first, 0), (first + 67, 0), (first + 97, 1)])
     credit = flat("Day 3 source text", "a6c6bf")
-    caption(screen, "Walkshed title", config.get("overview_title", "Walking catchment"), intro, .026, (left, top, 0), anchor)
+    caption(screen, "Walkshed title", heading, intro, TITLE_SIZE, (title_x, title_y, 0), anchor, side)
     caption(screen, "Isometric title", subject_name + " in 2.5D", detail, .029, (left, top, 0), anchor)
     if config.get("credit"):
         credit_text = config["credit"]
