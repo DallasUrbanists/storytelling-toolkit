@@ -45,7 +45,7 @@ Use `route_overrides` by GeoJSON feature ID to set `trace`, `trace_origin`, `dir
 
 Set `backing_corner` to zero for square callout corners. Set `backing_x_padding` for horizontal padding. Both are fractions of the long render edge. Set `backing_color`, `leader_color` and `dot_color` independently.
 
-Follow the [Maple Avenue walkthrough](maple-transit-controls.md) to apply the controls to the reference project.
+Use the [Maple style and editing workflow](maple-style.md) to carry the final look to a new project. Follow the [Maple Avenue walkthrough](maple-transit-controls.md) to apply the controls to the reference project.
 
 ## Validate
 

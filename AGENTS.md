@@ -17,3 +17,6 @@ Source code and reusable templates are committed here. Individual productions be
 
 ## Validation
 Run syntax/static tests where possible. Only report a Blender render as completed after a real Blender invocation generates a verified artifact. Do not assume QGIS, Blender, or Resolve are installed on the agent host. Record blockers precisely.
+
+## Geographic animation handoff
+For new productions that should carry forward the Maple Avenue look, use the toolkit's `"style_preset": "maple"` and follow [the Maple style and editing workflow](docs/maple-style.md). Keep a single canonical editable .blend during visual review. Apply small art-direction changes directly to that file and keep regeneration separate from direct edits.

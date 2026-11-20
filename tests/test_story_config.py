@@ -64,5 +64,24 @@ class StoryConfigTests(unittest.TestCase):
                 read_story(file)
 
 
+class MapleStyleTests(unittest.TestCase):
+    def test_preset_defaults_and_explicit_overrides(self):
+        from story_config import apply_style_preset, check_route_labels
+
+        callout = {"kind": "station", "backing_color": "123456"}
+        route = {"kind": "route", "route_labels": {}, "trace": 15}
+        road = {"kind": "route"}
+        apply_style_preset({"style_preset": "maple", "layers": [callout, route, road]})
+        self.assertEqual(callout["backing_color"], "123456")
+        self.assertEqual(callout["casing_color"], "ffffff")
+        self.assertEqual(callout["backing_x_padding"], 0.00075)
+        self.assertEqual(route["route_labels"], {"uppercase": True, "corner": 0, "x_padding": 0.0015})
+        self.assertEqual(route["trace"], 15)
+        self.assertEqual(road, {"kind": "route"})
+        check_route_labels(route["route_labels"], "Rail")
+        with self.assertRaisesRegex(ValueError, "route label x_padding"):
+            check_route_labels({"x_padding": -1}, "Rail")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -74,6 +74,11 @@ def check_route_labels(options, name):
     size = options.get("size", 0.013)
     if type(size) not in (int, float) or not 0 < size < 1:
         raise ValueError(f"{name}: route label size must be a positive fraction")
+    if "uppercase" in options and type(options["uppercase"]) is not bool:
+        raise ValueError(f"{name}: route label uppercase must be true or false")
+    for field in ("corner", "x_padding"):
+        if field in options and (type(options[field]) not in (int, float) or not 0 <= options[field] <= 0.1):
+            raise ValueError(f"{name}: route label {field} must be between 0 and 0.1")
     windows = options.get("windows", [])
     if not isinstance(windows, list):
         raise ValueError(f"{name}: route label windows must be a list")
@@ -122,9 +127,32 @@ def select_direction(feature, selector, name):
     return result
 
 
+def apply_style_preset(config):
+    preset = config.get("style_preset")
+    if preset is None:
+        return
+    if preset != "maple":
+        raise ValueError(f"Unknown style_preset: {preset!r}")
+    for layer in config["layers"]:
+        if layer["kind"] in {"callout", "station"}:
+            defaults = {
+                "label_backing": True, "auto_place": True,
+                "backing_corner": 0, "backing_x_padding": 0.00075,
+                "backing_color": "ffffff", "leader_color": "ffffff",
+                "dot_color": "ffffff", "casing_color": "ffffff",
+            }
+            for key, value in defaults.items():
+                layer.setdefault(key, value)
+        if layer["kind"] == "route" and isinstance(layer.get("route_labels"), dict):
+            for key, value in {"uppercase": True, "corner": 0, "x_padding": 0.0015}.items():
+                layer["route_labels"].setdefault(key, value)
+            layer.setdefault("trace", 30)
+
+
 def read_story(path):
     path = Path(path)
     config = json.loads(path.read_text(encoding="utf-8-sig"))
+    apply_style_preset(config)
     layers = config["layers"]
     if not layers or not config["steps"]:
         raise ValueError("A story needs at least one layer and one step")
@@ -188,7 +216,7 @@ def read_story(path):
                 selected.append(select_direction(feature, options.get("direction"), f"{name}/{fid}"))
             layer["features"] = selected
         if kind in {"callout", "station"}:
-            for option in ("backing_color", "leader_color", "dot_color"):
+            for option in ("backing_color", "leader_color", "dot_color", "casing_color"):
                 if option in layer:
                     color_option(layer[option], f"{name}/{option}")
             for option in ("backing_corner", "backing_x_padding"):
