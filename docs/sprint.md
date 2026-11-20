@@ -9,6 +9,8 @@ Dates are **milestone labels**, not fixed commitments. The actual calendar shoul
 | **3 — Research & 2.5D** | QGIS walkshed workflow, Census estimation with provenance, transit/zoning imports; building footprints to massing; foreground object fading/hiding | Verified study-area assets and an isometric city scene; obstructing buildings can be suppressed |
 | **4 — Roadway & finish** | Dimension-aware 4→3 roadway cross-section, buffered/unbuffered treatments, moving low-poly vehicles, scene render handoff to Resolve Free, dual-format final editing | Maple explainer with roadway transformation, editable QGIS/.blend/Resolve files, video exports, source manifest |
 
+The [Day 4 runbook](day-4.md) covers dimensional inputs, Blender animation and the Resolve handoff. Store per-video results with the production source manifest.
+
 ## Critical-path priorities
 1. Test actual render with correct geometry; don't continue building on a broken pipeline.
 2. Use real, verified geographic source files for publication; synthetic inputs are for engineering tests only.

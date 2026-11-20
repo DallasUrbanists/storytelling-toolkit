@@ -1,0 +1,276 @@
+{
+  "unit": "ft",
+  "existing": {
+    "curb_to_curb": 44,
+    "right_of_way": 57,
+    "left_outside": 6.5,
+    "right_outside": 6.5,
+    "elements": [
+      {
+        "id": "left-walk",
+        "type": "sidewalk",
+        "width": 6,
+        "direction": null,
+        "zone": "left",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "left-curb",
+        "type": "curb",
+        "width": 0.5,
+        "direction": null,
+        "zone": "left",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "travel-w",
+        "type": "travel",
+        "width": 11,
+        "direction": "reverse",
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "inner-w",
+        "type": "travel",
+        "width": 11,
+        "direction": "reverse",
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "inner-e",
+        "type": "travel",
+        "width": 11,
+        "direction": "forward",
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "travel-e",
+        "type": "travel",
+        "width": 11,
+        "direction": "forward",
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "right-curb",
+        "type": "curb",
+        "width": 0.5,
+        "direction": null,
+        "zone": "right",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "right-walk",
+        "type": "sidewalk",
+        "width": 6,
+        "direction": null,
+        "zone": "right",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      }
+    ]
+  },
+  "proposed": {
+    "curb_to_curb": 44,
+    "right_of_way": 57,
+    "left_outside": 6.5,
+    "right_outside": 6.5,
+    "elements": [
+      {
+        "id": "left-walk",
+        "type": "sidewalk",
+        "width": 6,
+        "direction": null,
+        "zone": "left",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "left-curb",
+        "type": "curb",
+        "width": 0.5,
+        "direction": null,
+        "zone": "left",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "bike-w",
+        "type": "bike",
+        "width": 5,
+        "direction": "reverse",
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "buffer-w",
+        "type": "buffer",
+        "width": 1.5,
+        "direction": null,
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "travel-w",
+        "type": "travel",
+        "width": 10.5,
+        "direction": "reverse",
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "turn",
+        "type": "turn",
+        "width": null,
+        "direction": "both",
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": false
+      },
+      {
+        "id": "travel-e",
+        "type": "travel",
+        "width": 10.5,
+        "direction": "forward",
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "buffer-e",
+        "type": "buffer",
+        "width": 1.5,
+        "direction": null,
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "bike-e",
+        "type": "bike",
+        "width": 5,
+        "direction": "forward",
+        "zone": "road",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "right-curb",
+        "type": "curb",
+        "width": 0.5,
+        "direction": null,
+        "zone": "right",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      },
+      {
+        "id": "right-walk",
+        "type": "sidewalk",
+        "width": 6,
+        "direction": null,
+        "zone": "right",
+        "source": "Illustrative dimensions for editorial visualization",
+        "locked": true
+      }
+    ]
+  },
+  "mapping": [
+    {
+      "existing": "left-walk",
+      "proposed": "left-walk"
+    },
+    {
+      "existing": "left-curb",
+      "proposed": "left-curb"
+    },
+    {
+      "existing": null,
+      "proposed": "bike-w"
+    },
+    {
+      "existing": null,
+      "proposed": "buffer-w"
+    },
+    {
+      "existing": "travel-w",
+      "proposed": "travel-w"
+    },
+    {
+      "existing": "inner-w",
+      "proposed": null
+    },
+    {
+      "existing": null,
+      "proposed": "turn"
+    },
+    {
+      "existing": "inner-e",
+      "proposed": null
+    },
+    {
+      "existing": "travel-e",
+      "proposed": "travel-e"
+    },
+    {
+      "existing": null,
+      "proposed": "buffer-e"
+    },
+    {
+      "existing": null,
+      "proposed": "bike-e"
+    },
+    {
+      "existing": "right-curb",
+      "proposed": "right-curb"
+    },
+    {
+      "existing": "right-walk",
+      "proposed": "right-walk"
+    }
+  ],
+  "length_m": 58,
+  "timing": {
+    "hold_frames": 84,
+    "morph_frames": 95,
+    "reveal_frames": 153,
+    "closing_frames": 105,
+    "easing": "smooth"
+  },
+  "camera": {
+    "landscape": {
+      "bearing": 16,
+      "tilt": 53,
+      "scale": 58
+    },
+    "portrait": {
+      "bearing": 8,
+      "tilt": 49,
+      "scale": 55
+    }
+  },
+  "title": "Four lanes to three",
+  "disclosure": "Illustrative widths  |  City of Dallas proposal",
+  "vehicles": {
+    "existing": [
+      "travel-w",
+      "travel-e"
+    ],
+    "proposed": [
+      "travel-e",
+      "bike-e"
+    ]
+  }
+}
