@@ -590,6 +590,17 @@ SUBTITLE_COLOR = "b0c6ca"
 
 
 def wrap_title(value, size, limit):
+    def text_width(line):
+        left, right = glyph_bounds(line, size)
+        return right - left
+
+    words = value.split()
+    if "\n" not in value and len(words) > 2 and text_width(value) > limit:
+        pairs = [(" ".join(words[:i]), " ".join(words[i:])) for i in range(1, len(words))]
+        fitting = [(a, b) for a, b in pairs if max(text_width(a), text_width(b)) <= limit]
+        if fitting:
+            return "\n".join(min(fitting, key=lambda pair: abs(text_width(pair[0]) - text_width(pair[1]))))
+
     lines = []
     for paragraph in value.splitlines() or [""]:
         line = ""
