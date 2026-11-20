@@ -179,6 +179,8 @@ def apply_style_preset(config):
             for key, value in defaults.items():
                 layer.setdefault(key, value)
         if layer["kind"] == "route":
+            if layer.get("route_mode") in ("bus", "rail"):
+                layer.setdefault("transit_casing", "0d1822")
             if layer.get("route_mode") == "bus":
                 layer.setdefault("uniform_color", "a695e9")
             if isinstance(layer.get("route_labels"), dict):
