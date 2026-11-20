@@ -224,6 +224,21 @@ class Placement:
 
 
 
+def municipality_offset(layouts, center, width, height, placement):
+    if placement == "center":
+        return 0, 0
+
+    def score(offset):
+        dx, dy = offset
+        cost = 0
+        for layout in layouts:
+            x, y = layout.screen(center)
+            cost += layout.score(rect((x + dx, y + dy), width, height))
+        return cost, hypot(dx, dy)
+
+    return min(callout_offsets((0, 0)), key=score)
+
+
 def title_corner(left_score, right_score, previous="LEFT"):
     """Use the preceding corner for effectively tied scores."""
     if abs(left_score - right_score) <= 1:
