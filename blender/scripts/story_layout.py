@@ -136,12 +136,30 @@ def crosses(a, b, c, d):
     return side(a, b, c) * side(a, b, d) < 0 and side(c, d, a) * side(c, d, b) < 0
 
 
+def leader_elbow(dx, dy, right_angle=False):
+    """Route along cardinal and 45-degree segments without moving either endpoint."""
+    if right_angle:
+        return 0, dy
+    if abs(dx) >= abs(dy):
+        return (abs(dy) if dx >= 0 else -abs(dy)), dy
+    return 0, dy - (abs(dx) if dy >= 0 else -abs(dx))
+
+
+def leader_segments(anchor, offset):
+    if not any(offset):
+        return []
+    x, y = anchor
+    dx, dy = offset
+    ex, ey = leader_elbow(dx, dy)
+    points = (anchor, (x + ex, y + ey), (x + dx, y + dy))
+    return [(a, b) for a, b in zip(points, points[1:]) if a != b]
+
+
 def callout_geometry(anchor, offset, width, height):
     x, y = anchor
     dx, dy = offset
     side = 1 if dx >= 0 else -1
-    elbow, edge = (x + dx * 0.67, y + dy), (x + dx, y + dy)
-    return rect((edge[0] + side * width / 2, edge[1]), width, height), [(anchor, elbow), (elbow, edge)]
+    return rect((x + dx + side * width / 2, y + dy), width, height), leader_segments(anchor, offset)
 
 
 def callout_offsets(preferred):

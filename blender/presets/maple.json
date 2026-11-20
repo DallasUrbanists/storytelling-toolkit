@@ -1,0 +1,24 @@
+{
+  "editorial_text": false,
+  "bus": {
+    "uniform_color": "a695e9",
+    "transit_casing": "0d1822",
+    "trace": 60,
+    "trace_stagger": 0,
+    "shared_trace_speed": true
+  },
+  "rail": {
+    "transit_casing": "0d1822",
+    "stroke_weight": 1.5,
+    "trace": 60,
+    "interline": {"spacing": 10.5, "tolerance": 28},
+    "route_overrides": {
+      "GREEN": {"color": "35cd7d"},
+      "ORANGE": {"color": "ffa84c"},
+      "RED": {"color": "e75856", "opacity": 0.25},
+      "BLUE": {"color": "408fda", "opacity": 0.25},
+      "TRE": {"color": "8ba2cb", "opacity": 0.25},
+      "SILVER": {"color": "a9abb1", "opacity": 0.25}
+    }
+  }
+}

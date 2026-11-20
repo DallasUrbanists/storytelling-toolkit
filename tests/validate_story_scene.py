@@ -29,9 +29,12 @@ assert scene.frame_end == timings[-1][2]
 
 assert scene.frame_current == 1
 titles = bpy.data.collections["Screen titles"].objects
-assert not titles[config["steps"][0]["title"]].hide_viewport
-if len(config["steps"]) > 1:
-    assert titles[config["steps"][1]["title"]].hide_viewport
+if config.get("editorial_text"):
+    assert not titles[config["steps"][0]["title"]].hide_viewport
+    if len(config["steps"]) > 1:
+        assert titles[config["steps"][1]["title"]].hide_viewport
+else:
+    assert not any(step["title"] in titles for step in config["steps"])
 
 
 def opacity(material):
@@ -77,7 +80,7 @@ for layer in config["layers"]:
                     badge = next(o for o in objects if o.type == "FONT" and o.data.body == name)
                     assert badge.parent.name.endswith("Badge placement")
                     for frame, visible in expected.items():
-                        scene.frame_set(frame)
+                        scene.frame_set(math.floor(frame),subframe=frame % 1)
                         assert badge.hide_render == (not visible), (name, frame)
                         if visible:
                             for corner in badge.bound_box:
@@ -88,7 +91,7 @@ for layer in config["layers"]:
             shape_keys = outline.data.shape_keys
             assert shape_keys.animation_data.drivers and "Parallel alignment" in shape_keys.key_blocks
         for frame, value in keys:
-            scene.frame_set(frame)
+            scene.frame_set(math.floor(frame),subframe=frame % 1)
             assert math.isclose(opacity(mat), value * layer.get("opacity", 1), abs_tol=1e-6), outline.name
         if layer.get("outside_dim"):
             mask = next(obj for obj in objects if obj.name.endswith("Outside mask"))
@@ -105,16 +108,22 @@ for layer in config["layers"]:
             assert abs(label.parent.rotation_euler.z) <= math.pi / 2
     if layer["kind"] in {"callout", "station"}:
         for label in (obj for obj in objects if obj.type == "FONT"):
-            assert label.parent.name.endswith("Label placement"), label.name
+            placement = label.parent.parent if layer.get("animate_callout") else label.parent
+            assert placement.name.endswith("Label placement"), label.name
             if layer.get("label_backing"):
                 backing = objects[label.data.body + " | Label backing"]
                 assert backing.parent == label.parent and backing.type == "CURVE"
-            anchor = label.parent.parent
+            anchor = placement.parent
             assert anchor.animation_data.drivers and label.data.body
             leader = objects.get(label.data.body + " | Leader")
             if leader:
-                hook = leader.modifiers[0]
-                assert leader.type == "CURVE" and hook.type == "HOOK" and hook.object == label.parent
+                assert leader.type == "CURVE"
+                if leader.modifiers:
+                    assert leader.modifiers[0].type == "HOOK" and leader.modifiers[0].object == placement
+                else:
+                    drivers = leader.data.animation_data.drivers
+                    assert any(target.id == placement for driver in drivers
+                               for variable in driver.driver.variables for target in variable.targets)
             for step, timing in zip(config["steps"], timings):
                 if step["layers"].get(layer["id"], 0) < 0.99:
                     continue

@@ -7,16 +7,17 @@ import sys
 from pathlib import Path
 
 import bpy
-from mathutils import Matrix, Vector
+from mathutils import Vector
 from mathutils.geometry import delaunay_2d_cdt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from story_layout import (
-    Placement, municipality_offset, parallel_routes, place_callout, rect, samples, split_trace, title_corner,
+    Placement, leader_elbow, leader_segments, municipality_offset, parallel_routes, place_callout, rect, samples,
+    split_trace, title_corner,
 )
 from story_config import (
-    FORMATS, badge_keys, bounds, frame_target, layer_events, municipality_center, positions,
-    project, read_story, route_opacity_keys, route_starts, schedule,
+    FORMATS, badge_keys, badge_opacity_keys, bounds, frame_target, layer_events, municipality_center, positions,
+    project, read_story, route_opacity_keys, route_starts, schedule, shared_trace_intervals,
 )
 
 
@@ -85,7 +86,15 @@ def spline(curve, points, cyclic=False):
     part.use_cyclic_u = cyclic
 
 
-def stroke(collection, name, paths, mat, width, at, camera=None, parent=None, draws=(), seed=0):
+def trace_ease_out(curve, starts):
+    for key in curve.keyframe_points:
+        if key.co.x in starts:
+            key.interpolation = "QUAD"
+            key.easing = "EASE_OUT"
+    curve.update()
+
+
+def stroke(collection, name, paths, mat, width, at, camera=None, parent=None, draws=(), seed=0, trace_easing=None):
     curve = bpy.data.curves.new(name, "CURVE")
     curve.dimensions = "3D"
     curve.bevel_resolution = 2
@@ -99,7 +108,7 @@ def stroke(collection, name, paths, mat, width, at, camera=None, parent=None, dr
         for begin, finish in draws:
             curve.bevel_factor_end = 0
             curve.keyframe_insert(data_path="bevel_factor_end", frame=max(1, begin - 1))
-            if seed and finish > begin:
+            if (seed or trace_easing in ("ease_out", "linear")) and finish > begin:
                 curve.bevel_factor_end = seed
                 curve.keyframe_insert(data_path="bevel_factor_end", frame=begin)
             curve.bevel_factor_end = 1
@@ -113,6 +122,15 @@ def stroke(collection, name, paths, mat, width, at, camera=None, parent=None, dr
         for key in trace.keyframe_points:
             if key.co.x in completed:
                 key.interpolation = "CONSTANT"
+        if trace_easing == "ease_out":
+            trace_ease_out(trace, {begin for begin, finish in draws if begin < finish})
+        if trace_easing == "linear":
+            curve.bevel_factor_mapping_end = "SPLINE"
+            starts = {begin for begin, finish in draws if begin < finish}
+            for key in trace.keyframe_points:
+                if any(math.isclose(key.co.x, begin, abs_tol=0.001) for begin in starts):
+                    key.interpolation = "LINEAR"
+            trace.update()
     return link(collection, name, curve, at, parent)
 
 
@@ -211,6 +229,107 @@ def raster_layer(collection, layer, keys, origin, z):
     link(collection, layer["id"], mesh, (0, 0, z))
 
 
+def bind_leader(line, placement, right_angle=False):
+    """Keep the leader on the angle grid as its endpoint moves."""
+    points = line.data.splines[0].points
+    expr = ("0", "y") if right_angle else (
+        "((abs(y) if x >= 0 else -abs(y)) if abs(x) >= abs(y) else 0)",
+        "(y if abs(x) >= abs(y) else y - (abs(x) if y >= 0 else -abs(x)))",
+    )
+    for point, formulas in ((points[1], expr), (points[2], ("x", "y"))):
+        for axis, formula in enumerate(formulas):
+            driver = point.driver_add("co", axis).driver
+            driver.type = "SCRIPTED"
+            for index, name in enumerate(("x", "y")):
+                var = driver.variables.new()
+                var.name = name
+                var.targets[0].id = placement
+                var.targets[0].data_path = f"location[{index}]"
+            driver.expression = formula
+
+
+def callout_visibility(keys):
+    """Read entrance starts and exit windows from authored opacity keys."""
+    if not keys:
+        return [], []
+    entries = [keys[0][0]] if keys[0][1] > 0 else []
+    exits = []
+    for (start, previous), (end, value) in zip(keys, keys[1:]):
+        if previous == 0 < value:
+            entries.append(start)
+        elif previous > 0 == value:
+            exits.append((start, end))
+    return entries, exits
+
+
+def animate_callout(collection, root, marker_parts, placement, lines, labels, marker_keys, label_keys):
+    """Scale at the geographic anchor and label connection, and trim the leader between them."""
+    marker = link(collection, root.name.replace("Geographic anchor", "Marker reveal"), parent=root)
+    for obj in marker_parts:
+        obj.parent = marker
+    label_root = link(collection, placement.name.replace("Label placement", "Label reveal"), parent=placement)
+    for obj in labels:
+        obj.parent = label_root
+    key_callout_choreography(marker, label_root, lines, marker_keys, label_keys)
+    return marker, label_root
+
+
+def key_callout_choreography(marker, label_root, lines, marker_keys, label_keys):
+    for line in lines:
+        line.data.bevel_factor_mapping_end = "SPLINE"
+
+    targets = [(marker, "scale", (0, 1))]
+    targets += [(line.data, "bevel_factor_end", (None,)) for line in lines]
+    targets += [(label_root, "scale", (0,))]
+
+    def pose(items, frame, value):
+        for item, property_name, axes in items:
+            for axis in axes:
+                if axis is None:
+                    setattr(item, property_name, value)
+                    item.keyframe_insert(data_path=property_name, frame=frame)
+                else:
+                    getattr(item, property_name)[axis] = value
+                    item.keyframe_insert(data_path=property_name, index=axis, frame=frame)
+
+    marker_track, leader_track, label_track = targets[:1], targets[1:-1], targets[-1:]
+    marker_enters, marker_exits = callout_visibility(marker_keys)
+    label_enters, label_exits = callout_visibility(label_keys)
+    for frame in marker_enters:
+        pose(marker_track, frame, 0)
+        pose(marker_track, frame+6, 1)
+    for frame in label_enters:
+        ready = max((start+6 for start in marker_enters if start <= frame), default=frame)
+        leader_start = max(frame, ready)
+        label_start = leader_start + (7 if lines else 0)
+        pose(leader_track, leader_start, 0)
+        pose(leader_track, label_start, 1)
+        pose(label_track, label_start, 0)
+        pose(label_track, label_start+7, 1)
+    matched_marker_exits = set()
+    for start, end in label_exits:
+        if end-start<2:
+            continue
+        marker_exit = next(((a,b) for a,b in marker_exits if abs(a-start)<=1 and b-a>=2), None)
+        if marker_exit:
+            end = min(end, marker_exit[1])
+            matched_marker_exits.add(marker_exit)
+        stages = 1 + bool(lines) + bool(marker_exit)
+        duration = end-start
+        label_end = start+duration/stages
+        pose(label_track, start, 1)
+        pose(label_track, label_end, 0)
+        if lines:
+            leader_end = label_end+duration/stages
+            pose(leader_track, label_end, 1)
+            pose(leader_track, leader_end, 0)
+        if marker_exit:
+            pose(marker_track, end-duration/stages, 1)
+            pose(marker_track, end, 0)
+    for start,end in marker_exits:
+        if (start,end) not in matched_marker_exits and end-start>=2:
+            pose(marker_track, start, 1)
+            pose(marker_track, end, 0)
 def callout(collection, layer, feature, origin, z, camera, format_name, keys, color, layouts):
     props = feature.get("properties", {})
     name = props.get("name", layer["id"])
@@ -229,7 +348,18 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
     white = material(name + " | White casing", layer.get("casing_color", "f1f7fc"), keys, opacity)
     radius = layer.get("radius", 0.0036)
     disk = [(radius * math.cos(i * math.tau / 24), radius * math.sin(i * math.tau / 24)) for i in range(24)]
-    fill(collection, name + " | Anchor dot", [(disk, True)], ink[dot_color], (0, 0, 12), root)
+    dot = fill(collection, name + " | Anchor dot", [(disk, True)], ink[dot_color], (0, 0, 12), root)
+    marker_parts = [dot]
+    marker = props.get("marker", layer.get("marker"))
+    if marker == "hospital" or (marker is None and "hospital" in name.casefold()):
+        asset = Path(__file__).resolve().parents[1] / "assets/hospital-marker.json"
+        for part in json.loads(asset.read_text(encoding="utf-8")):
+            detail = part["white"]
+            mesh = bpy.data.meshes.new("Hospital marker mesh")
+            mesh.from_pydata([(x*radius*1.5,y*radius*1.5,0) for x,y in part["points"]],[],part["faces"])
+            mesh.materials.append(material(name + " | Hospital ink", "ffffff" if detail else "000000", keys, opacity))
+            marker_parts.append(link(collection,name + (" | Hospital details" if detail else " | Hospital silhouette"),
+                                     mesh, (0,0,14 if detail else 13),root))
     preferred = props.get("offsets", {}).get(format_name, layer.get("offsets", {}).get(format_name, [0.025, 0.023]))
     size = layer.get("text_size", 0.017)
     width, height, text_center = label_box(name, size, 0.005, layer.get("backing_x_padding"))
@@ -240,27 +370,29 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
     placement = link(collection, name + " | Label placement", at=(dx, dy, 0), parent=root)
     placement.empty_display_type = "PLAIN_AXES"
     placement.empty_display_size = 0.007
+    lines, labels = [], []
     if dx or dy:
-        path = [(0, 0), (dx * 0.67, dy), (dx, dy)]
+        path = [(0, 0), leader_elbow(dx, dy), (dx, dy)]
         casing = stroke(collection, name + " | Leader casing", [path], white, 0.0020, (0, 0, 2), parent=root)
         leader = stroke(collection, name + " | Leader", [path], ink[leader_color], 0.0010, (0, 0, 6), parent=root)
         for line in (casing, leader):
-            hook = line.modifiers.new("Follow label placement", "HOOK")
-            hook.object = placement
-            hook.vertex_indices_set([1, 2])
-            hook.matrix_inverse = Matrix.Translation((-dx, -dy, line.location.z))
+            bind_leader(line, placement)
+            lines.append(line)
     direction = 1 if dx >= 0 else -1
     if layer.get("label_backing", False):
         text = material(name + " | Text", contrasting_text(backing_color), keys, opacity)
         box_x = direction * width / 2
-        panel(collection, name + " | Label backing", ink[backing_color], width, height, (box_x, 0, 13),
-              placement, corner=layer.get("backing_corner", 0.003))
+        labels.append(panel(collection, name + " | Label backing", ink[backing_color], width, height, (box_x, 0, 13),
+                            placement, corner=layer.get("backing_corner", 0.003)))
         label = caption(collection, name + " | Label", name, text, size, (box_x - text_center, 0, 16), placement, "CENTER")
         label.data.offset = weight
     else:
         label = caption(collection, name + " | Label", name, white, size, (direction * 0.004, 0, 16), placement,
                 "LEFT" if direction == 1 else "RIGHT")
         label.data.offset = weight
+    labels.append(label)
+    if layer.get("animate_callout"):
+        animate_callout(collection, root, marker_parts, placement, lines, labels, keys, keys)
 
 
 def panel(collection, name, mat, width, height, at, parent, corner=0.003):
@@ -310,7 +442,8 @@ def contrasting_text(color):
 
 
 def styled_route_layer(layer):
-    return any(key in layer for key in ("interline", "route_labels", "route_overrides", "trace_origin", "uniform_color"))
+    return any(key in layer for key in ("interline", "route_labels", "route_overrides", "trace_origin", "uniform_color",
+                                       "shared_trace_speed"))
 
 
 def route_paths(layer, origin):
@@ -347,13 +480,13 @@ def choose_badge(packed, layouts, owner, width, height, separation):
             for dx, dy in ((0, 0), (-0.039, 0), (0.039, 0), (0, -0.027), (0, 0.027),
                            (-0.043, 0.027), (0.043, -0.027)):
                 box = rect((x + dx, y + dy), width + 0.010, height + 0.010)
-                leader = [((x, y), (x + dx, y + dy))] if dx or dy else []
+                leader = leader_segments((x, y), (dx, dy))
                 conflicts = 0
                 for pose in layouts:
                     u, v = pose.screen(path[i])
                     u, v = u + vx * separation, v + vy * separation
                     pose_box = rect((u + dx, v + dy), width + 0.010, height + 0.010)
-                    tether = [((u, v), (u + dx, v + dy))] if leader else []
+                    tether = leader_segments((u, v), (dx, dy))
                     conflicts += pose.score(pose_box, tether, owner=owner)
                 rank = (conflicts, bool(leader), math.hypot(x, y), part)
                 if best is None or rank < best[0]:
@@ -373,7 +506,7 @@ def interline_stroke(obj, packed, camera, separation, scale):
 
 
 def route_badge(collection, label, point, offset, separation, color, timing, size, width, height, z, camera, shift,
-                corner=0.003, text_center=0):
+                corner=0.003, text_center=0, text_weight=0, reveal_frames=0):
     root = link(collection, label + " | Badge anchor", at=(*point, z))
     for axis in (0, 1):
         scale_driver(root, "scale", camera, 1, axis)
@@ -381,23 +514,21 @@ def route_badge(collection, label, point, offset, separation, color, timing, siz
         if delta:
             scale_driver(root, "location", camera, delta, axis)
             root.animation_data.drivers.find("location", index=axis).driver.expression += f" + ({point[axis]:.12g})"
-    static = [(1, 1)]
-    rim = material(label + " | Badge rim", "162733", static)
-    main = material(label + " | Badge", color, static)
-    text = material(label + " | Badge text", contrasting_text(color), static)
+    opacity = badge_opacity_keys(timing, reveal_frames)
+    rim = material(label + " | Badge rim", "162733", opacity)
+    main = material(label + " | Badge", color, opacity)
+    text = material(label + " | Badge text", contrasting_text(color), opacity)
     badge = link(collection, label + " | Badge placement", at=(*shift, 0), parent=root)
     parts = [
         panel(collection, label + " | Badge rim", rim, width + 0.0025, height + 0.0025, (0, 0, 1), badge, corner=corner),
         panel(collection, label + " | Badge backing", main, width, height, (0, 0, 3), badge, corner=corner),
         caption(collection, label + " | Route label", label, text, size, (-text_center, 0, 5), badge, "CENTER"),
     ]
+    parts[-1].data.offset = text_weight
     if any(shift):
-        tether = stroke(collection, label + " | Route badge tether", [[(0, 0), shift]], main,
+        tether = stroke(collection, label + " | Route badge tether", [[(0, 0), leader_elbow(*shift), shift]], main,
                         0.00115, (0, 0, 0), parent=root)
-        hook = tether.modifiers.new("Follow badge placement", "HOOK")
-        hook.object = badge
-        hook.vertex_indices_set([1])
-        hook.matrix_inverse = Matrix.Translation((-shift[0], -shift[1], 0))
+        bind_leader(tether, badge)
         parts.append(tether)
     for obj in parts:
         for frame, visible in timing.items():
@@ -451,27 +582,38 @@ def badge_visible_in_pose(timing, layout):
 
 def place_route_badges(pending, camera, badge_z):
     # All geographic labels are registered before badges pick positions.
-    for mode, collection, label, paths, layouts, owner, separation, color, timing, options in sorted(
+    for mode, collection, label, paths, layouts, owner, separation, color, timing, options, trace in sorted(
             pending, key=lambda batch: batch[0] == "bus"):
         size = options.get("size", 0.013)
         width, height, text_center = label_box(label, size, 0.0045, options.get("x_padding"))
         layouts = [layout for layout in layouts if badge_visible_in_pose(timing, layout)] or layouts[:1]
+        weight = size * .035 if options.get("text_weight", "bold" if mode == "rail" else "regular") == "bold" else 0
+        width += 2 * weight
+        if options.get("square_minimum"):
+            width = max(width, height)
         choice = choose_badge(paths, layouts, owner, width, height, separation)
         if choice is None:
             continue
         _, part, i, _, shift, _ = choice
         path, offsets = paths[part]
+        if trace:
+            spans, starts, end = trace
+            begin, finish = spans[part]
+            lengths = [math.dist(a, b) for a, b in zip(path, path[1:])]
+            progress = sum(lengths[:i]) / sum(lengths)
+            arrivals = [math.ceil(start + begin + (finish-begin)*progress - 1e-8) for start in starts]
+            timing = badge_keys(options, arrivals, end)
         vx, vy = offset = offsets[i] if offsets else (0, 0)
         for layout in layouts:
             x, y = layout.screen(path[i])
             x, y = x + vx * separation, y + vy * separation
             target = (x + shift[0], y + shift[1])
             layout.boxes.append(rect(target, width + 0.010, height + 0.010))
-            if any(shift):
-                layout.leaders.append(((x, y), target))
+            layout.leaders.extend(leader_segments((x, y), shift))
         route_badge(collection, label, path[i], offset, separation, color, timing, size, width, height,
                     badge_z + (20 if mode == "bus" else 0), camera, shift,
-                    corner=options.get("corner", 0.003), text_center=text_center)
+                    corner=options.get("corner", 0.003), text_center=text_center, text_weight=weight,
+                    reveal_frames=options.get("reveal_frames", 0))
 
 
 def transit_casing(obj, collection, color, width):
@@ -479,7 +621,8 @@ def transit_casing(obj, collection, color, width):
     outline.data = obj.data.copy()
     outline.name = obj.name + " | Transit casing"
     collection.objects.link(outline)
-    outline.location.z -= 1
+    obj.scale.z = outline.scale.z = .001
+    outline.location.z -= .2
     ink = obj.data.materials[0].copy()
     ink.diffuse_color = paint(color)
     ink.node_tree.nodes["Emission"].inputs["Color"].default_value = ink.diffuse_color
@@ -493,18 +636,61 @@ def transit_casing(obj, collection, color, width):
     return outline
 
 
+def speed_group(layer, packed, origin):
+    ordered = []
+    lengths = []
+    for feature, paths in zip(layer["features"], packed):
+        properties = feature.get("properties", {})
+        override = layer.get("route_overrides", {}).get(properties.get("id"), {})
+        launch = override.get("trace_origin", layer.get("trace_origin"))
+        if launch is not None:
+            primary, secondary = split_trace(paths, project(launch, origin))
+            paths = primary + secondary
+        ordered.append(paths)
+        lengths.append([
+            sum(math.dist(a, b) for a, b in zip(path, path[1:]))
+            for path, _ in paths
+        ])
+    return ordered, shared_trace_intervals(lengths, layer.get("trace", 0), layer.get("trace_stagger", 0))
+
+
+def extend_speed_group_holds(steps, layers, packed, origin):
+    """Give each newly visible group time to finish at the common speed."""
+    holds = [step.copy() for step in steps]
+    for name, layer in layers.items():
+        if not layer.get("shared_trace_speed") or not layer.get("trace"):
+            continue
+        _, intervals = speed_group(layer, packed[name], origin)
+        latest = max((pieces[-1][1] for pieces in intervals if pieces), default=0)
+        visible = False
+        for step in holds:
+            now = bool(step["layers"].get(name))
+            if now and not visible:
+                minimum = layer.get("delay", 0) + math.ceil(latest) + layer.get("route_labels", {}).get("reveal_frames", 0) + 1
+                step["hold"] = max(step["hold"], minimum)
+            visible = now
+    return holds
+
+
 def styled_routes(collection, layer, packed, keys, draws, camera, layouts, z, end, scale, config, pending):
     label_options = layer.get("route_labels")
     width, separation = layer.get("width", 5), lane_spacing(layer)
+    width *= layer.get("stroke_weight", 1)
+    shared = speed_group(layer, packed, config["origin"]) if draws and layer.get("shared_trace_speed") else None
     for number, (feature, paths) in enumerate(zip(layer["features"], packed), 1):
         props = feature.get("properties", {})
         name = props.get("name", f"{layer['id']} {number}")
         override = layer.get("route_overrides", {}).get(props.get("id"), {})
         route_keys, route_draws = keys, draws
-        if "trace" in override:
+        if shared:
+            paths, offsets = shared[0][number-1], shared[1][number-1]
+            finish = offsets[-1][1] if offsets else 0
+            route_draws = [(first, first+finish) for first, _ in draws]
+        elif "trace" in override:
             steps = config["steps"]
             route_keys, route_draws = layer_events({**layer, "trace": override["trace"]}, steps, schedule(steps))
-        starts = route_starts(route_keys, route_draws)
+        starts = ([math.ceil(last) for _, last in route_draws] if shared and offsets
+                  else route_starts(route_keys, route_draws))
         if label_options is not None:
             route_keys = route_opacity_keys(route_keys, route_draws)
         color = layer.get("uniform_color", override.get("color", props.get(
@@ -515,24 +701,39 @@ def styled_routes(collection, layer, packed, keys, draws, camera, layouts, z, en
             label = str(props.get("route_label", props.get("id", name)))
             if options.get("uppercase", False):
                 label = label.upper()
-            timing = badge_keys(options, starts, end)
+            trace = (offsets, [first for first, _ in draws], end) if shared and offsets and "windows" not in options else None
+            placement_starts = [math.ceil(first+offsets[0][0]) for first, _ in draws] if trace else starts
+            timing = badge_keys(options, placement_starts, end)
             if any(timing.values()):
                 pending.append((layer.get("route_mode"), collection, label, paths, layouts,
-                                (layer["id"], number), separation, color, timing, options))
+                                (layer["id"], number), separation, color, timing, options, trace))
+        route_z = z + number * .6 if layer.get("transit_casing") else z
+        if shared and offsets:
+            for index, ((path, normals), (a, b)) in enumerate(zip(paths, offsets)):
+                intervals = [(first+a, first+b) for first, _ in draws]
+                part = name if not index else f"{name} | Trace part {index+1}"
+                obj = stroke(collection, part, [path], mat, width, (0, 0, route_z),
+                             camera=camera, draws=intervals, trace_easing="linear")
+                interline_stroke(obj, [(path, normals)], camera, separation, scale)
+                if layer.get("transit_casing"):
+                    transit_casing(obj, collection, layer["transit_casing"], (width + 2) / width)
+            continue
         coordinate = override.get("trace_origin", layer.get("trace_origin"))
         remaining = []
         if route_draws:
             point = project(coordinate, config["origin"]) if coordinate is not None else None
             paths, remaining = split_trace(paths, point)
-        obj = stroke(collection, name, [path for path, _ in paths], mat, width, (0, 0, z),
-                     camera=camera, draws=route_draws, seed=0.01 if route_draws else 0)
+        obj = stroke(collection, name, [path for path, _ in paths], mat, width, (0, 0, route_z),
+                     camera=camera, draws=route_draws, seed=0.01 if route_draws else 0,
+                     trace_easing=layer.get("trace_easing"))
         interline_stroke(obj, paths, camera, separation, scale)
         if layer.get("transit_casing"):
             transit_casing(obj, collection, layer["transit_casing"], (width + 2) / width)
         if remaining:
             later = [(first + (last - first + 1) // 2, last) for first, last in route_draws]
             branch = stroke(collection, name + " | Additional paths", [path for path, _ in remaining],
-                            mat, width, (0, 0, z), camera=camera, draws=later)
+                            mat, width, (0, 0, route_z), camera=camera, draws=later,
+                            trace_easing=layer.get("trace_easing"))
             interline_stroke(branch, remaining, camera, separation, scale)
             if layer.get("transit_casing"):
                 transit_casing(branch, collection, layer["transit_casing"], (width + 2) / width)
@@ -707,7 +908,8 @@ def title_cards(scene, camera, steps, timings, dimensions, metadata, layouts):
     width, height = (value / max(dimensions) for value in dimensions)
     left, top = -width / 2 + 0.033, height / 2 - 0.045
     side = "LEFT"
-    for step, (_, arrival, end), layout in zip(steps, timings, layouts):
+    editorial = zip(steps, timings, layouts) if metadata.get("editorial_text", False) else ()
+    for step, (_, arrival, end), layout in editorial:
         name = step["title"]
         side, x, y, subtitle_y, value = title_position(dimensions, layout, name, step.get("subtitle", ""), side)
         print(f"Title {name}: {side}", flush=True)
@@ -791,8 +993,12 @@ def build(config, format_name):
     if scene.world.node_tree is None:
         scene.world.use_nodes = True
     scene.world.node_tree.nodes.get("Background").inputs["Color"].default_value = paint(config.get("background", "14222e"))
-    steps = config["steps"]
     layers = {layer["id"]: layer for layer in config["layers"]}
+    packed = {name: route_paths(layer, config["origin"]) for name, layer in layers.items()
+              if layer["kind"] in {"route", "street_labels"}
+              and (styled_route_layer(layer) or layer["kind"] == "street_labels" or layer.get("avoid_labels"))}
+    steps = extend_speed_group_holds(config["steps"], layers, packed, config["origin"])
+    config = {**config, "steps": steps}
     timings = schedule(steps)
     frames = [step_frame(step, layers, config["origin"], format_name, dimensions) for step in steps]
     scene.frame_start, scene.frame_end = 1, timings[-1][2]
@@ -806,9 +1012,6 @@ def build(config, format_name):
     camera.data.passepartout_alpha = 0.95
     scene.camera = camera
     animate_camera(camera, steps, timings, frames, height, scene)
-    packed = {name: route_paths(layer, config["origin"]) for name, layer in layers.items()
-              if layer["kind"] in {"route", "street_labels"}
-              and (styled_route_layer(layer) or layer["kind"] == "street_labels" or layer.get("avoid_labels"))}
     layouts = [Placement(pose, dimensions, (arrival, end))
                for pose, (_, arrival, end) in zip(frames, timings)]
     for step, layout in zip(steps, layouts):

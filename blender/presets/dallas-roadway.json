@@ -1,0 +1,11 @@
+{
+  "id": "dallas-roadway",
+  "turn_arrow_length_ft": 8.0,
+  "turn_arrow_width_ft": 6.5,
+  "opposing_tail_gap_ft": 12.0,
+  "arrow_opacity": 0.25,
+  "sources": [
+    {"label": "Dallas standard construction details, sheet 5008, turn lane arrow", "url": "https://dallascityhall.com/departments/pnv/Documents/AH%20Memos/CityofDallasStandardConst.Details251D-1_02.20.2026-signed.pdf#page=78"},
+    {"label": "Texas MUTCD Figure 3B-7B, intersecting driveways", "url": "https://www.txdot.gov/content/dam/docs/division/trf/tmutcd/part-3-markings.pdf#page=13"}
+  ]
+}
