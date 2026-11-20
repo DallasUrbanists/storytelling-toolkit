@@ -33,3 +33,18 @@ top-left and top-right title boxes against visible routes, labels, and other
 map features available to that shot. A near tie keeps the preceding shot's
 corner. A tie on the opening shot picks the top left. Long headings wrap to the
 frame width. Subtitles are optional and move together with their headings.
+
+## Label municipalities
+
+Supply a WGS 84 GeoJSON source as a layer with kind "municipalities". Use named
+incorporated-place polygons or published geographic center points, with the
+name in the "name" or "NAME" field. Draw order puts the labels over basemap
+streets and under overlay routes. Set "basemap" to true on any custom basemap
+layer that belongs beneath the labels.
+
+Center placement uses the entire municipal geometry. A center outside the
+camera frame stays where it is. Set "placement" to "dynamic" on a municipality
+layer to try nearby positions that avoid other map elements. To turn the
+labels off, set "municipality_labels" to false on the project or individual
+shot, or set "labels" to false on the municipality layer. The appended
+walkshed inherits the source centers and accepts the same label toggle.
