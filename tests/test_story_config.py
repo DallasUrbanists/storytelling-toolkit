@@ -114,5 +114,24 @@ class MapleStyleTests(unittest.TestCase):
         self.assertEqual(select_direction(feature, "1", "213")["geometry"], departure)
 
 
+class TitlePlacementTests(unittest.TestCase):
+    def test_uses_previous_corner_for_ties(self):
+        from story_layout import title_corner
+
+        self.assertEqual(title_corner(8, 8), "LEFT")
+        self.assertEqual(title_corner(8, 9, "RIGHT"), "RIGHT")
+        self.assertEqual(title_corner(8, 0, "LEFT"), "RIGHT")
+        self.assertEqual(title_corner(0, 8, "RIGHT"), "LEFT")
+
+    def test_route_intersection_scores_as_title_conflict(self):
+        from story_layout import Placement, title_corner
+
+        placement = Placement(((0, 0), 1000), FORMATS["landscape"])
+        placement.add_route(("rail", 1), [([(-470, 195), (-320, 270)], [])], 0)
+        left = placement.title_conflicts((-.48, .20, -.27, .27))
+        right = placement.title_conflicts((.27, .20, .48, .27))
+        self.assertEqual(title_corner(left, right), "RIGHT")
+
+
 if __name__ == "__main__":
     unittest.main()
