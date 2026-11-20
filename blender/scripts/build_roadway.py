@@ -297,8 +297,8 @@ def import_buildings(scene, source, root, length, camera, row, config):
         clone.parent = None
         clone.matrix_world = matrix
         clone.color[3] = 1
-        if original.get("source_id") in config.get("visibility_overrides",{}):
-            clone["visibility_override"] = config["visibility_overrides"][original["source_id"]]
+        if original.get("building_id") in config.get("visibility_overrides",{}):
+            clone["visibility_override"] = config["visibility_overrides"][original["building_id"]]
         mass.objects.link(clone)
         buildings.append(clone)
     bpy.context.view_layer.update()
@@ -313,13 +313,21 @@ def import_buildings(scene, source, root, length, camera, row, config):
 
 def build(config, format_name):
     primary = bpy.context.scene
-    source_mass = primary.collection.children.get("Day 3 | editable geographic stage")
-    source_mass = source_mass.children.get("Generated building volumes") if source_mass else None
+    stage = primary.collection.children.get("Day 3 | editable geographic stage")
+    source_mass = stage.children.get("Generated building volumes") if stage else None
     building_poses = []
     if source_mass and config.get("geography"):
         original_frame = primary.frame_current
         primary.frame_set(primary.frame_end)
-        building_poses = [(obj,obj.matrix_world.copy()) for obj in source_mass.objects]
+        ground = stage.children.get("Geographic ground layers")
+        floor = next((obj for obj in ground.objects if obj.name.split(".")[0] == "Ground"), None) if ground else None
+        # Day 3 places its map on a lower Z plane to isolate it from Day 2.
+        # Keep geographic X/Y and bring the entire massing stage to the new road surface.
+        ground_z = floor.matrix_world.translation.z if floor else 0
+        for obj in source_mass.objects:
+            pose = obj.matrix_world.copy()
+            pose[2][3] -= ground_z
+            building_poses.append((obj,pose))
         primary.frame_set(original_frame)
     slots, roads, rows = load_model(config)
     length = positive(config["length_m"],"Roadway length")
