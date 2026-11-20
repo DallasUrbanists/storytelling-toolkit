@@ -206,8 +206,8 @@ def run(args):
     context = QgsProcessingContext()
     context.setProject(project)
     context.setEllipsoid("NONE")
-    config = args.input
-    out = args.output
+    config = args.input.resolve()
+    out = args.output.resolve()
     gpkg = out / "Maple_Day_3.gpkg"
     if gpkg.exists():
         raise FileExistsError(f"Use a new output directory: {gpkg}")
