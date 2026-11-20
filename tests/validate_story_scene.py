@@ -63,13 +63,16 @@ for layer in config["layers"]:
         mat = outline.data.materials[0]
         if "route_labels" in layer:
             starts = route_starts(keys, draws)
-            for feature in layer["features"]:
+            for number, feature in enumerate(layer["features"], 1):
                 props = feature.get("properties", {})
-                name = props.get("route_label", props.get("id", props.get("name")))
-                if name is False:
+                if props.get("route_label") is False:
                     continue
-                expected = badge_keys({**layer["route_labels"], **props.get("route_label_timing", {})},
-                                      starts, scene.frame_end)
+                fallback = props.get("name", f"{layer['id']} {number}")
+                name = str(props.get("route_label", props.get("id", fallback)))
+                options = {**layer["route_labels"], **props.get("route_label_timing", {})}
+                if options.get("uppercase"):
+                    name = name.upper()
+                expected = badge_keys(options, starts, scene.frame_end)
                 if any(expected.values()):
                     badge = next(o for o in objects if o.type == "FONT" and o.data.body == name)
                     assert badge.parent.name.endswith("Badge placement")
@@ -135,4 +138,5 @@ for (_, arrival, end), (first, next_arrival, _) in zip(timings, timings[1:]):
         assert min(start, finish) < halfway < max(start, finish)
 
 print(f"Validated {args.format} scene, {len(timings)} focus steps, {scene.frame_end} frames at 30 fps")
+
 
