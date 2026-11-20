@@ -70,17 +70,48 @@ class MapleStyleTests(unittest.TestCase):
 
         callout = {"kind": "station", "backing_color": "123456"}
         route = {"kind": "route", "route_labels": {}, "trace": 15}
+        bus = {"kind": "route", "route_mode": "bus", "route_labels": {}}
         road = {"kind": "route"}
-        apply_style_preset({"style_preset": "maple", "layers": [callout, route, road]})
+        apply_style_preset({"style_preset": "maple", "layers": [callout, route, bus, road]})
         self.assertEqual(callout["backing_color"], "123456")
         self.assertEqual(callout["casing_color"], "ffffff")
-        self.assertEqual(callout["backing_x_padding"], 0.00075)
-        self.assertEqual(route["route_labels"], {"uppercase": True, "corner": 0, "x_padding": 0.0015})
+        self.assertEqual(callout["backing_x_padding"], "character")
+        self.assertEqual(route["route_labels"], {"uppercase": True, "corner": 0, "x_padding": "character"})
         self.assertEqual(route["trace"], 15)
+        self.assertEqual(bus["uniform_color"], "a695e9")
+        self.assertNotIn("uniform_color", route)
+        self.assertEqual(bus["route_labels"]["x_padding"], 0.0015)
         self.assertEqual(road, {"kind": "route", "opening_visible": True})
         check_route_labels(route["route_labels"], "Rail")
         with self.assertRaisesRegex(ValueError, "route label x_padding"):
             check_route_labels({"x_padding": -1}, "Rail")
+
+
+    def test_select_bus_direction_by_headsign_or_override(self):
+        from story_config import select_direction
+
+        combined = {"type": "MultiLineString", "coordinates": [[[0, 0], [1, 1]], [[1, 1], [0, 0]]]}
+        departure = {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}
+        feature = {"geometry": combined, "properties": {"directions": [
+            {"direction_id": "1", "headsign": "Bachman Station", "geometry": departure}
+        ]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "bus.geojson").write_text(json.dumps({
+                "type": "FeatureCollection", "features": [
+                    {**feature, "properties": {**feature["properties"], "id": "213"}}]
+            }), encoding="utf-8")
+            file = directory / "story.json"
+            layer = {"id": "bus", "kind": "route", "file": "bus.geojson", "route_mode": "bus",
+                     "direction": "Bachman Station"}
+            story = {"origin": [0, 0], "layers": [layer],
+                     "steps": [{"hold": 4, "focus": ["bus"], "layers": {"bus": 1}}]}
+            file.write_text(json.dumps(story), encoding="utf-8")
+            self.assertEqual(read_story(file)["layers"][0]["features"][0]["geometry"], departure)
+            layer["route_overrides"] = {"213": {"direction": "all"}}
+            file.write_text(json.dumps(story), encoding="utf-8")
+            self.assertEqual(read_story(file)["layers"][0]["features"][0]["geometry"], combined)
+        self.assertEqual(select_direction(feature, "1", "213")["geometry"], departure)
 
 
 if __name__ == "__main__":

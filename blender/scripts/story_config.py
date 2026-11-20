@@ -66,6 +66,11 @@ def positions(geometry):
         yield from part
 
 
+def check_padding(value, name):
+    if value != "character" and (type(value) not in (int, float) or not 0 <= value <= 0.1):
+        raise ValueError(f"{name}: expected 'character' or a fraction from 0 to 0.1")
+
+
 def check_route_labels(options, name):
     if not isinstance(options, dict):
         raise ValueError(f"{name}: route label settings must be an object")
@@ -76,9 +81,10 @@ def check_route_labels(options, name):
         raise ValueError(f"{name}: route label size must be a positive fraction")
     if "uppercase" in options and type(options["uppercase"]) is not bool:
         raise ValueError(f"{name}: route label uppercase must be true or false")
-    for field in ("corner", "x_padding"):
-        if field in options and (type(options[field]) not in (int, float) or not 0 <= options[field] <= 0.1):
-            raise ValueError(f"{name}: route label {field} must be between 0 and 0.1")
+    if "corner" in options and (type(options["corner"]) not in (int, float) or not 0 <= options["corner"] <= 0.1):
+        raise ValueError(f"{name}: route label corner must be between 0 and 0.1")
+    if "x_padding" in options:
+        check_padding(options["x_padding"], f"{name}: route label x_padding")
     windows = options.get("windows", [])
     if not isinstance(windows, list):
         raise ValueError(f"{name}: route label windows must be a list")
@@ -140,16 +146,20 @@ def apply_style_preset(config):
         if layer["kind"] in {"callout", "station"}:
             defaults = {
                 "label_backing": True, "auto_place": True,
-                "backing_corner": 0, "backing_x_padding": 0.00075,
+                "backing_corner": 0, "backing_x_padding": "character",
                 "backing_color": "ffffff", "leader_color": "ffffff",
                 "dot_color": "ffffff", "casing_color": "ffffff",
             }
             for key, value in defaults.items():
                 layer.setdefault(key, value)
-        if layer["kind"] == "route" and isinstance(layer.get("route_labels"), dict):
-            for key, value in {"uppercase": True, "corner": 0, "x_padding": 0.0015}.items():
-                layer["route_labels"].setdefault(key, value)
-            layer.setdefault("trace", 30)
+        if layer["kind"] == "route":
+            if layer.get("route_mode") == "bus":
+                layer.setdefault("uniform_color", "a695e9")
+            if isinstance(layer.get("route_labels"), dict):
+                padding = 0.0015 if layer.get("route_mode") == "bus" else "character"
+                for key, value in {"uppercase": True, "corner": 0, "x_padding": padding}.items():
+                    layer["route_labels"].setdefault(key, value)
+                layer.setdefault("trace", 30)
 
 
 def read_story(path):
@@ -201,8 +211,17 @@ def read_story(path):
         ]
         if not layer["features"]:
             raise ValueError(f"{name}: no selected features")
+        if "route_mode" in layer and (kind != "route" or layer["route_mode"] not in ("bus", "rail")):
+            raise ValueError(f"{name}: route_mode must be 'bus' or 'rail' on a route layer")
+        if "uniform_color" in layer:
+            if kind != "route":
+                raise ValueError(f"{name}: uniform_color is only supported on a route layer")
+            color_option(layer["uniform_color"], f"{name}/uniform_color")
         if kind == "route":
             route_options(layer, name, config["origin"])
+            select = layer.get("direction", "all")
+            if not isinstance(select, str) or not select.strip():
+                raise ValueError(f"{name}: direction must be 'all', a GTFS direction ID or headsign")
             overrides = layer.get("route_overrides", {})
             if not isinstance(overrides, dict):
                 raise ValueError(f"{name}: route_overrides must be an object keyed by feature id")
@@ -216,15 +235,17 @@ def read_story(path):
                 if not isinstance(options, dict) or set(options) - {"trace", "trace_origin", "direction", "color", "opacity"}:
                     raise ValueError(f"{name}/{fid}: invalid route override")
                 route_options(options, f"{name}/{fid}", config["origin"])
-                selected.append(select_direction(feature, options.get("direction"), f"{name}/{fid}"))
+                selected.append(select_direction(feature, options.get("direction", select), f"{name}/{fid}"))
             layer["features"] = selected
         if kind in {"callout", "station"}:
             for option in ("backing_color", "leader_color", "dot_color", "casing_color"):
                 if option in layer:
                     color_option(layer[option], f"{name}/{option}")
-            for option in ("backing_corner", "backing_x_padding"):
-                if option in layer and (type(layer[option]) not in (int, float) or not 0 <= layer[option] <= 0.1):
-                    raise ValueError(f"{name}: {option} must be between 0 and 0.1")
+            corner = layer.get("backing_corner", 0)
+            if type(corner) not in (int, float) or not 0 <= corner <= 0.1:
+                raise ValueError(f"{name}: backing_corner must be between 0 and 0.1")
+            if "backing_x_padding" in layer:
+                check_padding(layer["backing_x_padding"], f"{name}/backing_x_padding")
         for feature in layer["features"]:
             geometry = feature["geometry"]
             properties = feature.get("properties", {})

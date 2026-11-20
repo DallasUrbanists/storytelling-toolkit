@@ -1,6 +1,7 @@
 """Build one editable Blender composition from a local geographic story."""
 import argparse
 import math
+from functools import lru_cache
 import sys
 from pathlib import Path
 
@@ -227,7 +228,7 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
     fill(collection, name + " | Anchor dot", [(disk, True)], ink[dot_color], (0, 0, 12), root)
     preferred = props.get("offsets", {}).get(format_name, layer.get("offsets", {}).get(format_name, [0.025, 0.023]))
     size = layer.get("text_size", 0.017)
-    width, height = text_box(name, size, 0.005, layer.get("backing_x_padding"))
+    width, height, text_center = label_box(name, size, 0.005, layer.get("backing_x_padding"))
     auto = props.get("auto_place", layer.get("auto_place", False))
     dx, dy = place_callout(layouts, (x, y), preferred, width, height) if auto else preferred
     placement = link(collection, name + " | Label placement", at=(dx, dy, 0), parent=root)
@@ -248,7 +249,7 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
         box_x = direction * width / 2
         panel(collection, name + " | Label backing", ink[backing_color], width, height, (box_x, 0, 13),
               placement, corner=layer.get("backing_corner", 0.003))
-        caption(collection, name + " | Label", name, text, size, (box_x, 0, 16), placement, "CENTER")
+        caption(collection, name + " | Label", name, text, size, (box_x - text_center, 0, 16), placement, "CENTER")
     else:
         caption(collection, name + " | Label", name, white, size, (direction * 0.004, 0, 16), placement,
                 "LEFT" if direction == 1 else "RIGHT")
@@ -268,13 +269,40 @@ def text_box(value, size, padding, horizontal=None):
     return units * size + 2 * (padding if horizontal is None else horizontal), size * 1.05 + padding
 
 
+@lru_cache(maxsize=256)
+def glyph_bounds(value, size):
+    """Measure the actual centered Blender glyph geometry in local coordinates."""
+    data = bpy.data.curves.new("Label measurement", "FONT")
+    obj = bpy.data.objects.new("Label measurement", data)
+    try:
+        data.body, data.size, data.align_x = value, size, "CENTER"
+        bpy.context.scene.collection.objects.link(obj)
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        evaluated = obj.evaluated_get(depsgraph)
+        coords = [corner[0] for corner in evaluated.bound_box]
+        return min(coords), max(coords)
+    finally:
+        bpy.data.objects.remove(obj, do_unlink=True)
+        bpy.data.curves.remove(data)
+
+
+def label_box(value, size, vertical, horizontal):
+    if horizontal != "character":
+        width, height = text_box(value, size, vertical, horizontal)
+        return width, height, 0
+    left, right = glyph_bounds(value, size)
+    ink_width = right - left
+    average = ink_width / max(1, sum(not char.isspace() for char in value))
+    return ink_width + 2 * average, size * 1.05 + vertical, (left + right) / 2
+
+
 def contrasting_text(color):
     light = sum(v * k for v, k in zip(paint(color), (0.2126, 0.7152, 0.0722)))
     return "13232f" if light > 0.24 else "f1f7fc"
 
 
 def styled_route_layer(layer):
-    return any(key in layer for key in ("interline", "route_labels", "route_overrides", "trace_origin"))
+    return any(key in layer for key in ("interline", "route_labels", "route_overrides", "trace_origin", "uniform_color"))
 
 
 def route_paths(layer, origin):
@@ -294,7 +322,8 @@ def lane_spacing(layer):
     return layer.get("interline", {}).get("spacing", layer.get("width", 5) + 2) / 1920
 
 
-def choose_badge(packed, layout, owner, width, height, separation):
+def choose_badge(packed, layouts, owner, width, height, separation):
+    layout = layouts[0]
     best = None
     for part, (path, offsets) in enumerate(packed):
         last = None
@@ -311,10 +340,16 @@ def choose_badge(packed, layout, owner, width, height, separation):
                            (-0.043, 0.027), (0.043, -0.027)):
                 box = rect((x + dx, y + dy), width + 0.010, height + 0.010)
                 leader = [((x, y), (x + dx, y + dy))] if dx or dy else []
-                cost = layout.score(box, leader, owner=owner) + math.hypot(x, y) * 26 + part * 4
-                cost += 35 if leader else 0
-                if best is None or cost < best[0]:
-                    best = cost, part, i, box, (dx, dy), leader
+                conflicts = 0
+                for pose in layouts:
+                    u, v = pose.screen(path[i])
+                    u, v = u + vx * separation, v + vy * separation
+                    pose_box = rect((u + dx, v + dy), width + 0.010, height + 0.010)
+                    tether = [((u, v), (u + dx, v + dy))] if leader else []
+                    conflicts += pose.score(pose_box, tether, owner=owner)
+                rank = (conflicts, bool(leader), math.hypot(x, y), part)
+                if best is None or rank < best[0]:
+                    best = rank, part, i, box, (dx, dy), leader
     return best
 
 
@@ -329,7 +364,8 @@ def interline_stroke(obj, packed, camera, separation, scale):
     scale_driver(key, "value", camera, 1 / scale)
 
 
-def route_badge(collection, label, point, offset, separation, color, timing, size, width, height, z, camera, shift, corner=0.003):
+def route_badge(collection, label, point, offset, separation, color, timing, size, width, height, z, camera, shift,
+                corner=0.003, text_center=0):
     root = link(collection, label + " | Badge anchor", at=(*point, z))
     for axis in (0, 1):
         scale_driver(root, "scale", camera, 1, axis)
@@ -345,7 +381,7 @@ def route_badge(collection, label, point, offset, separation, color, timing, siz
     parts = [
         panel(collection, label + " | Badge rim", rim, width + 0.0025, height + 0.0025, (0, 0, 1), badge, corner=corner),
         panel(collection, label + " | Badge backing", main, width, height, (0, 0, 3), badge, corner=corner),
-        caption(collection, label + " | Route label", label, text, size, (0, 0, 5), badge, "CENTER"),
+        caption(collection, label + " | Route label", label, text, size, (-text_center, 0, 5), badge, "CENTER"),
     ]
     if any(shift):
         tether = stroke(collection, label + " | Route badge tether", [[(0, 0), shift]], main,
@@ -397,7 +433,40 @@ def street_label(collection, feature, paths, keys, layer, camera, layout, z, ori
     caption(collection, name + " | Street label", name, ink, size, (0, 0, 3), root, "CENTER")
 
 
-def styled_routes(collection, layer, packed, keys, draws, camera, layout, z, end, scale, config):
+def badge_visible_in_pose(timing, layout):
+    if layout.visible_frames is None:
+        return True
+    first, end = layout.visible_frames
+    prior = next((on for frame, on in reversed(sorted(timing.items())) if frame <= first), False)
+    return prior or any(on and first < frame <= end for frame, on in timing.items())
+
+
+def place_route_badges(pending, camera, badge_z):
+    # All geographic labels are registered before badges pick positions.
+    for mode, collection, label, paths, layouts, owner, separation, color, timing, options in sorted(
+            pending, key=lambda batch: batch[0] == "bus"):
+        size = options.get("size", 0.013)
+        width, height, text_center = label_box(label, size, 0.0045, options.get("x_padding"))
+        layouts = [layout for layout in layouts if badge_visible_in_pose(timing, layout)] or layouts[:1]
+        choice = choose_badge(paths, layouts, owner, width, height, separation)
+        if choice is None:
+            continue
+        _, part, i, _, shift, _ = choice
+        path, offsets = paths[part]
+        vx, vy = offset = offsets[i] if offsets else (0, 0)
+        for layout in layouts:
+            x, y = layout.screen(path[i])
+            x, y = x + vx * separation, y + vy * separation
+            target = (x + shift[0], y + shift[1])
+            layout.boxes.append(rect(target, width + 0.010, height + 0.010))
+            if any(shift):
+                layout.leaders.append(((x, y), target))
+        route_badge(collection, label, path[i], offset, separation, color, timing, size, width, height,
+                    badge_z + (20 if mode == "bus" else 0), camera, shift,
+                    corner=options.get("corner", 0.003), text_center=text_center)
+
+
+def styled_routes(collection, layer, packed, keys, draws, camera, layouts, z, end, scale, config, pending):
     label_options = layer.get("route_labels")
     width, separation = layer.get("width", 5), lane_spacing(layer)
     for number, (feature, paths) in enumerate(zip(layer["features"], packed), 1):
@@ -411,7 +480,8 @@ def styled_routes(collection, layer, packed, keys, draws, camera, layout, z, end
         starts = route_starts(route_keys, route_draws)
         if label_options is not None:
             route_keys = route_opacity_keys(route_keys, route_draws)
-        color = override.get("color", props.get(layer.get("color_property", ""), layer.get("color", "4de2c1")))
+        color = layer.get("uniform_color", override.get("color", props.get(
+            layer.get("color_property", ""), layer.get("color", "4de2c1"))))
         mat = material(name, color, route_keys, override.get("opacity", layer.get("opacity", 1)))
         if label_options is not None and props.get("route_label", True) is not False:
             options = {**label_options, **props.get("route_label_timing", {})}
@@ -420,17 +490,8 @@ def styled_routes(collection, layer, packed, keys, draws, camera, layout, z, end
                 label = label.upper()
             timing = badge_keys(options, starts, end)
             if any(timing.values()):
-                size = options.get("size", 0.013)
-                w, h = text_box(label, size, 0.0045, options.get("x_padding"))
-                choice = choose_badge(paths, layout, (layer["id"], number), w, h, separation)
-                if choice:
-                    _, part, i, box, shift, leader = choice
-                    layout.boxes.append(box)
-                    layout.leaders.extend(leader)
-                    path, offsets = paths[part]
-                    offset = offsets[i] if offsets else (0, 0)
-                    route_badge(collection, label, path[i], offset, separation, color,
-                                timing, size, w, h, z + 320, camera, shift, corner=options.get("corner", 0.003))
+                pending.append((layer.get("route_mode"), collection, label, paths, layouts,
+                                (layer["id"], number), separation, color, timing, options))
         coordinate = override.get("trace_origin", layer.get("trace_origin"))
         remaining = []
         if route_draws:
@@ -447,7 +508,7 @@ def styled_routes(collection, layer, packed, keys, draws, camera, layout, z, end
 
 
 def add_layer(collection, layer, keys, draws, config, z, camera, format_name, mask_bounds,
-              layouts, packed, scale, end):
+              layouts, packed, scale, end, pending):
     layout = layouts[0]
     kind, name, origin = layer["kind"], layer["id"], config["origin"]
     if kind == "raster":
@@ -458,7 +519,7 @@ def add_layer(collection, layer, keys, draws, config, z, camera, format_name, ma
             street_label(collection, feature, paths, keys, layer, camera, layout, z, origin)
         return
     if kind == "route" and styled_route_layer(layer):
-        styled_routes(collection, layer, packed, keys, draws, camera, layout, z, end, scale, config)
+        styled_routes(collection, layer, packed, keys, draws, camera, layouts, z, end, scale, config, pending)
         return
     colors = {}
     shade_polygons = []
@@ -629,7 +690,8 @@ def build(config, format_name):
     packed = {name: route_paths(layer, config["origin"]) for name, layer in layers.items()
               if layer["kind"] in {"route", "street_labels"}
               and (styled_route_layer(layer) or layer["kind"] == "street_labels" or layer.get("avoid_labels"))}
-    layouts = [Placement(pose, dimensions) for pose in frames]
+    layouts = [Placement(pose, dimensions, (arrival, end))
+               for pose, (_, arrival, end) in zip(frames, timings)]
     for step, layout in zip(steps, layouts):
         for name, paths in packed.items():
             layer = layers[name]
@@ -639,6 +701,7 @@ def build(config, format_name):
                 layout.add_route((name, number), path, lane_spacing(layer))
     stacking = {name: index * 400 for index, name in enumerate(layers, 1)}
     order = {"route": 0, "boundary": 0, "raster": 0, "street_labels": 1, "callout": 2, "station": 2}
+    pending = []
     for layer in sorted(layers.values(), key=lambda item: order[item["kind"]]):
         name = layer["id"]
         collection = bpy.data.collections.new(name)
@@ -646,7 +709,8 @@ def build(config, format_name):
         keys, draws = layer_events(layer, steps, timings)
         active_layouts = [layout for step, layout in zip(steps, layouts) if step["layers"].get(name)]
         add_layer(collection, layer, keys, draws, config, stacking[name], camera, format_name, mask_bounds,
-                  active_layouts or layouts[:1], packed.get(name), scale, scene.frame_end)
+                  active_layouts or layouts[:1], packed.get(name), scale, scene.frame_end, pending)
+    place_route_badges(pending, camera, max(stacking.values()) + 320)
     title_cards(scene, camera, steps, timings, dimensions, config)
     for screen in bpy.data.screens:
         for area in screen.areas:

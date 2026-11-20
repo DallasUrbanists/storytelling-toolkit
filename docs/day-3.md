@@ -63,3 +63,8 @@ blender -b --factory-startup --python-exit-code 1 --python tests/validate_day3_b
 ```
 
 Validate both orientations using frames from the original geographic story, the new overhead shot, the tilt, and the final close view. Review the alpha keys and inspect the roadway against a normal-visibility control render.
+
+
+### Street context for the walkshed shot
+
+Supply `context_lines` as a WGS 84 street network that extends beyond the entire overhead camera footprint in both formats. Add any wider source networks in `context_supplemental_lines` as a list of GeoJSON paths. The builder uses the walkshed camera center, authored scale and output aspect ratio to select street geometry with a small margin. Supply wider source data for larger overview scales. The camera target and walkshed scale are independent of the street network, and the normal map attribution should name every source used.

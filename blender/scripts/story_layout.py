@@ -154,8 +154,9 @@ def callout_offsets(preferred):
 class Placement:
     """Screen space inputs use fractions of the long render edge."""
 
-    def __init__(self, pose, dimensions):
+    def __init__(self, pose, dimensions, visible_frames=None):
         self.center, self.scale = pose
+        self.visible_frames = visible_frames
         width, height = (value / max(dimensions) for value in dimensions)
         self.frame = rect((0, 0), width - 0.038, height - 0.038)
         left, top = -width / 2, height / 2
