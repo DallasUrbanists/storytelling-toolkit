@@ -224,3 +224,49 @@ def place_callout(layouts, point, preferred, width, height):
         layout.boxes.append(box)
         layout.leaders.extend(leader)
     return offset
+
+def split_trace(paths, coordinate=None):
+    """Split the selected centerline at its midpoint or nearest segment point."""
+    if coordinate is None:
+        lengths = [[hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(path, path[1:])]
+                   for path, _ in paths]
+        part = max(range(len(paths)), key=lambda i: sum(lengths[i]))
+        remaining = sum(lengths[part]) / 2
+        for segment, length in enumerate(lengths[part]):
+            if length and remaining <= length:
+                fraction = remaining / length
+                break
+            remaining -= length
+        else:
+            segment, fraction = 0, 0
+    else:
+        best = None
+        for index, (path, _) in enumerate(paths):
+            for j, (a, b) in enumerate(zip(path, path[1:])):
+                dx, dy = b[0] - a[0], b[1] - a[1]
+                length2 = dx * dx + dy * dy
+                t = max(0, min(1, ((coordinate[0] - a[0]) * dx + (coordinate[1] - a[1]) * dy) / length2)) if length2 else 0
+                x, y = mix(a, b, t)
+                candidate = (hypot(coordinate[0] - x, coordinate[1] - y), index, j, t)
+                if best is None or candidate < best:
+                    best = candidate
+        _, part, segment, fraction = best
+    path, offsets = paths[part]
+    launch = mix(path[segment], path[segment + 1], fraction)
+    cut = segment + (fraction == 1)
+    if 0 < fraction < 1:
+        cut = segment + 1
+        path = [*path[:cut], launch, *path[cut:]]
+        if offsets:
+            offsets = [*offsets[:cut], mix(offsets[segment], offsets[segment + 1], fraction), *offsets[cut:]]
+    branches = [(path[a:b][::stride], offsets[a:b][::stride])
+                for a, b, stride in ((0, cut + 1, -1), (cut, len(path), 1)) if b - a >= 2]
+    remaining_paths = []
+    for index, (other, lane) in enumerate(paths):
+        if index == part:
+            continue
+        if hypot(other[-1][0] - launch[0], other[-1][1] - launch[1]) < hypot(
+                other[0][0] - launch[0], other[0][1] - launch[1]):
+            other, lane = other[::-1], lane[::-1]
+        remaining_paths.append((other, lane))
+    return branches, remaining_paths
