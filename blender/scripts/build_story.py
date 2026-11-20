@@ -233,6 +233,8 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
     preferred = props.get("offsets", {}).get(format_name, layer.get("offsets", {}).get(format_name, [0.025, 0.023]))
     size = layer.get("text_size", 0.017)
     width, height, text_center = label_box(name, size, 0.005, layer.get("backing_x_padding"))
+    weight = size * .035 if layer.get("text_weight") == "bold" else 0
+    width += 2 * weight
     auto = props.get("auto_place", layer.get("auto_place", False))
     dx, dy = place_callout(layouts, (x, y), preferred, width, height) if auto else preferred
     placement = link(collection, name + " | Label placement", at=(dx, dy, 0), parent=root)
@@ -253,10 +255,12 @@ def callout(collection, layer, feature, origin, z, camera, format_name, keys, co
         box_x = direction * width / 2
         panel(collection, name + " | Label backing", ink[backing_color], width, height, (box_x, 0, 13),
               placement, corner=layer.get("backing_corner", 0.003))
-        caption(collection, name + " | Label", name, text, size, (box_x - text_center, 0, 16), placement, "CENTER")
+        label = caption(collection, name + " | Label", name, text, size, (box_x - text_center, 0, 16), placement, "CENTER")
+        label.data.offset = weight
     else:
-        caption(collection, name + " | Label", name, white, size, (direction * 0.004, 0, 16), placement,
+        label = caption(collection, name + " | Label", name, white, size, (direction * 0.004, 0, 16), placement,
                 "LEFT" if direction == 1 else "RIGHT")
+        label.data.offset = weight
 
 
 def panel(collection, name, mat, width, height, at, parent, corner=0.003):
@@ -470,6 +474,25 @@ def place_route_badges(pending, camera, badge_z):
                     corner=options.get("corner", 0.003), text_center=text_center)
 
 
+def transit_casing(obj, collection, color, width):
+    outline = obj.copy()
+    outline.data = obj.data.copy()
+    outline.name = obj.name + " | Transit casing"
+    collection.objects.link(outline)
+    outline.location.z -= 1
+    ink = obj.data.materials[0].copy()
+    ink.diffuse_color = paint(color)
+    ink.node_tree.nodes["Emission"].inputs["Color"].default_value = ink.diffuse_color
+    outline.data.materials[0] = ink
+    curve = outline.data.animation_data
+    driver = curve.drivers.find("bevel_depth") if curve else None
+    if driver:
+        driver.driver.expression = f"({driver.driver.expression}) * {width:.9g}"
+    else:
+        outline.data.bevel_depth *= width
+    return outline
+
+
 def styled_routes(collection, layer, packed, keys, draws, camera, layouts, z, end, scale, config, pending):
     label_options = layer.get("route_labels")
     width, separation = layer.get("width", 5), lane_spacing(layer)
@@ -504,11 +527,15 @@ def styled_routes(collection, layer, packed, keys, draws, camera, layouts, z, en
         obj = stroke(collection, name, [path for path, _ in paths], mat, width, (0, 0, z),
                      camera=camera, draws=route_draws, seed=0.01 if route_draws else 0)
         interline_stroke(obj, paths, camera, separation, scale)
+        if layer.get("transit_casing"):
+            transit_casing(obj, collection, layer["transit_casing"], (width + 2) / width)
         if remaining:
             later = [(first + (last - first + 1) // 2, last) for first, last in route_draws]
             branch = stroke(collection, name + " | Additional paths", [path for path, _ in remaining],
                             mat, width, (0, 0, z), camera=camera, draws=later)
             interline_stroke(branch, remaining, camera, separation, scale)
+            if layer.get("transit_casing"):
+                transit_casing(branch, collection, layer["transit_casing"], (width + 2) / width)
 
 
 def municipality_data(layer, origin):

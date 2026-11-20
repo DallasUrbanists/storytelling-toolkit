@@ -171,7 +171,7 @@ def apply_style_preset(config):
             layer.setdefault("opening_visible", True)
         if layer["kind"] in {"callout", "station"}:
             defaults = {
-                "label_backing": True, "auto_place": True,
+                "label_backing": True, "auto_place": True, "text_weight": "bold",
                 "backing_corner": 0, "backing_x_padding": "character",
                 "backing_color": "ffffff", "leader_color": "ffffff",
                 "dot_color": "ffffff", "casing_color": "ffffff",
@@ -179,6 +179,8 @@ def apply_style_preset(config):
             for key, value in defaults.items():
                 layer.setdefault(key, value)
         if layer["kind"] == "route":
+            if layer.get("route_mode") in ("bus", "rail"):
+                layer.setdefault("transit_casing", "0d1822")
             if layer.get("route_mode") == "bus":
                 layer.setdefault("uniform_color", "a695e9")
             if isinstance(layer.get("route_labels"), dict):
