@@ -1,0 +1,137 @@
+{
+  "fps": 30,
+  "minimum_settled_hold_frames": 150,
+  "sizes": {
+    "portrait": [
+      1080,
+      1920
+    ],
+    "landscape": [
+      1920,
+      1080
+    ]
+  },
+  "clips": [
+    {
+      "id": "M01-before",
+      "action": "Four-lane driveway exit and right-angle contact",
+      "exports": {
+        "portrait": "portrait/M01-before-portrait.mp4",
+        "landscape": "landscape/M01-before-landscape.mp4"
+      }
+    },
+    {
+      "id": "M01-after",
+      "action": "Matched driveway exit across a shorter near-side crossing",
+      "exports": {
+        "portrait": "portrait/M01-after-portrait.mp4",
+        "landscape": "landscape/M01-after-landscape.mp4"
+      }
+    },
+    {
+      "id": "M02-before",
+      "action": "Left turn into driveway with opposing car screened by inside-lane vehicle",
+      "exports": {
+        "portrait": "portrait/M02-before-portrait.mp4",
+        "landscape": "landscape/M02-before-landscape.mp4"
+      }
+    },
+    {
+      "id": "M02-after",
+      "action": "Center-lane wait and completed left turn after opposing traffic clears",
+      "exports": {
+        "portrait": "portrait/M02-after-portrait.mp4",
+        "landscape": "landscape/M02-after-landscape.mp4"
+      }
+    },
+    {
+      "id": "M03-before",
+      "action": "Through-lane left-turn wait and rear-end contact",
+      "sample": "examples/m03-rear-end.json",
+      "exports": {
+        "portrait": "portrait/M03-before-portrait.mp4",
+        "landscape": "landscape/M03-before-landscape.mp4"
+      }
+    },
+    {
+      "id": "M03-after",
+      "action": "Center-lane wait, follower passes, then completed left turn",
+      "exports": {
+        "portrait": "portrait/M03-after-portrait.mp4",
+        "landscape": "landscape/M03-after-landscape.mp4"
+      }
+    },
+    {
+      "id": "M04-before",
+      "action": "Two successful lane changes followed by contact on the third attempt",
+      "exports": {
+        "portrait": "portrait/M04-before-portrait.mp4",
+        "landscape": "landscape/M04-before-landscape.mp4"
+      }
+    },
+    {
+      "id": "M04-after",
+      "action": "Driver follows slower traffic with refuge interrupting the center lane",
+      "exports": {
+        "portrait": "portrait/M04-after-portrait.mp4",
+        "landscape": "landscape/M04-after-landscape.mp4"
+      }
+    },
+    {
+      "id": "M05-before",
+      "action": "Unmarked midblock path and two successive pedestrian contacts",
+      "exports": {
+        "portrait": "portrait/M05-before-portrait.mp4",
+        "landscape": "landscape/M05-before-landscape.mp4"
+      }
+    },
+    {
+      "id": "M05-after-stop",
+      "action": "Matched unmarked path and SUV stops short",
+      "exports": {
+        "portrait": "portrait/M05-after-stop-portrait.mp4",
+        "landscape": "landscape/M05-after-stop-landscape.mp4"
+      }
+    },
+    {
+      "id": "M05-after-contact",
+      "action": "Matched unmarked path and lower-speed contact",
+      "exports": {
+        "portrait": "portrait/M05-after-contact-portrait.mp4",
+        "landscape": "landscape/M05-after-contact-landscape.mp4"
+      }
+    },
+    {
+      "id": "M05-after-refuge",
+      "action": "Nearby protected crossing, independent yields and refuge pause",
+      "exports": {
+        "portrait": "portrait/M05-after-refuge-portrait.mp4",
+        "landscape": "landscape/M05-after-refuge-landscape.mp4"
+      }
+    },
+    {
+      "id": "M06-reverse",
+      "action": "Pickup reverses across sidewalk apron as an older pedestrian walks past",
+      "exports": {
+        "portrait": "portrait/M06-reverse-portrait.mp4",
+        "landscape": "landscape/M06-reverse-landscape.mp4"
+      }
+    },
+    {
+      "id": "M07-before",
+      "action": "Ambulance approaches staggered queues on four-lane road",
+      "exports": {
+        "portrait": "portrait/M07-before-portrait.mp4",
+        "landscape": "landscape/M07-before-landscape.mp4"
+      }
+    },
+    {
+      "id": "M07-after",
+      "action": "Drivers yield and ambulance passes via open center lane",
+      "exports": {
+        "portrait": "portrait/M07-after-portrait.mp4",
+        "landscape": "landscape/M07-after-landscape.mp4"
+      }
+    }
+  ]
+}

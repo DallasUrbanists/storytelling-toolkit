@@ -1,0 +1,108 @@
+{
+  "id": "crash-driver-view",
+  "description": "Synthetic mechanics test for editorial illustration",
+  "roadway": "../../examples/illustrative-roadway.json",
+  "camera": {
+    "portrait": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "scale": 35,
+      "bearing": 8,
+      "tilt": 31
+    },
+    "landscape": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "scale": 46,
+      "bearing": 28,
+      "tilt": 33
+    }
+  },
+  "frames": 320,
+  "actors": [
+    {
+      "id": "Turning driver",
+      "model": "sedan",
+      "role": "primary",
+      "poses": [
+        [
+          1,
+          1.68,
+          -8,
+          0,
+          0,
+          0
+        ],
+        [
+          30,
+          1.68,
+          -8,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "Screen vehicle",
+      "model": "SUV",
+      "role": "context",
+      "poses": [
+        [
+          1,
+          -1.68,
+          0.8,
+          0,
+          180,
+          0
+        ],
+        [
+          30,
+          -1.68,
+          0.8,
+          0,
+          180,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "Oncoming car",
+      "model": "sedan",
+      "role": "secondary",
+      "poses": [
+        [
+          1,
+          -5.03,
+          8,
+          0,
+          180,
+          0
+        ],
+        [
+          30,
+          -5.03,
+          8,
+          0,
+          180,
+          0
+        ]
+      ]
+    }
+  ],
+  "visibility_checks": [
+    {
+      "frame": 15,
+      "viewer": "Turning driver",
+      "screen": "Screen vehicle",
+      "target": "Oncoming car",
+      "driver_hidden": true
+    }
+  ]
+}
