@@ -86,6 +86,21 @@ def rectangle(collection, name, center, size, z, mat):
     return link(collection, name, mesh, (0, 0, z))
 
 
+def stage_massing_reveal(objects, start, end):
+    nodes = objects[0].data.materials[0].node_tree.nodes
+    links = objects[0].data.materials[0].node_tree.links
+    alpha = nodes.get("Principled BSDF").inputs["Alpha"]
+    influence = nodes.new("ShaderNodeMath")
+    influence.operation = "MULTIPLY"
+    influence.label = "Reveal representative building area"
+    links.new(alpha.links[0].from_socket, influence.inputs[0])
+    links.new(influence.outputs[0], alpha)
+    for frame, opacity in ((start, 0), (end, 1)):
+        influence.inputs[1].default_value = opacity
+        influence.inputs[1].keyframe_insert(data_path="default_value", frame=frame)
+
+
+
 def add_shot(scene, directory, config, format_name, mode):
     origin = config["origin"]
     subject_name = config.get("subject_name", "Study corridor")
@@ -135,6 +150,7 @@ def add_shot(scene, directory, config, format_name, mode):
     objects = create_massing(editable, read(directory / config["buildings"]), origin, rise,
                              config.get("floor_height_m", 3.2), config.get("fallback_height_m", 7),
                              config.get("visibility_overrides", {}))
+    stage_massing_reveal(objects, first + 36, first + 74)
     sun = link(stage, "Massing sunlight", bpy.data.lights.new("Massing sunlight", "SUN"))
     sun.rotation_euler = (math.radians(34), math.radians(-27), math.radians(-18))
     sun.data.energy = 2.2
@@ -190,13 +206,22 @@ def add_shot(scene, directory, config, format_name, mode):
     caption(screen, "Walkshed title", config.get("overview_title", "Walking catchment"), intro, .026, (left, top, 0), anchor)
     caption(screen, "Isometric title", subject_name + " in 2.5D", detail, .029, (left, top, 0), anchor)
     if config.get("credit"):
-        caption(screen, "Map attribution", config["credit"], credit, .011, (left, bottom, 0), anchor)
+        credit_text = config["credit"]
+        caption(screen, "Map attribution", credit_text, credit, .011, (left, bottom, 0), anchor)
+        box = bpy.data.meshes.new("Attribution backing")
+        width = min(len(credit_text) * 0.006, .89 if format_name == "landscape" else .5)
+        box.from_pydata([(-.009,-.015,-.001),(width,-.015,-.001),
+                         (width,.009,-.001),(-.009,.009,-.001)], [], [(0,1,2,3)])
+        box.materials.append(flat("Attribution background", "223742"))
+        link(screen, "Attribution backing", box, (left, bottom, 0), anchor)
     if config.get("approved_caption"):
         value = read(directory / config["approved_caption"])
         if not value.get("approved_by"):
             raise ValueError("Population caption needs explicit approval")
         caption(screen, "Population estimate", value["caption"], intro, .018,
                 (left, top - .034, 0), anchor)
+        caption(screen, "Population source", value["source"], intro, .012,
+                (left, top - .055, 0), anchor)
     rays = sample_subject([[(x, y, z + .20) for x, y in line] for line in roads],
                           half_width=width * .46)
     hits = bake_visibility(scene, camera, objects, rays, first, end, mode,
