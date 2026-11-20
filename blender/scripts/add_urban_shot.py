@@ -9,7 +9,8 @@ import bpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_story import (
-    TITLE_COLOR, TITLE_SIZE, caption, feature_polygons, link, map_fill, material, paint, scale_driver,
+    TITLE_COLOR, TITLE_SIZE, caption, feature_polygons, link, map_fill, material, municipality_data,
+    municipality_label, paint, scale_driver,
     stroke, title_position,
 )
 from story_config import FORMATS, bounds, frame_target, project
@@ -74,9 +75,11 @@ def flat(name, color):
     return mat
 
 
-def add_polygon(collection, dataset, origin, name, color, z):
+def add_polygon(collection, dataset, origin, name, color, z, show_holes=True):
     polygons = [projected for feature in dataset["features"]
                 for projected in feature_polygons(feature["geometry"], origin)]
+    if not show_holes:
+        polygons = [rings[:1] for rings in polygons]
     return map_fill(collection, name, polygons, flat(name, color), z)
 
 
@@ -139,6 +142,14 @@ def add_shot(scene, directory, config, format_name, mode):
     all_points = [p for line in roads for p in line]
     ground = group(stage, "Geographic ground layers")
     context = config.get("context_lines")
+    style = {**json.loads(scene.get("geographic_style_json", "{}")), **config.get("map_style", {})}
+    ground_color = style.get("ground_color", "223742")
+    municipalities = json.loads(scene.get("municipality_labels_json", "[]"))
+    if config.get("municipalities"):
+        layer = {"id": "municipalities", "features": read(directory / config["municipalities"])["features"]}
+        municipalities = list(municipality_data(layer, origin))
+    if not config.get("municipality_labels", True):
+        municipalities = []
     center = project(config["detail_center"], origin)
     fields = config.get("framing", {}).get(format_name, {})
     full_center, full_scale = frame_target(all_points, FORMATS[format_name], 1.45, min_scale=0)
@@ -150,12 +161,15 @@ def add_shot(scene, directory, config, format_name, mode):
         full_center, full_scale = frame_target([p for ring in rings for p in ring], FORMATS[format_name], 1.16)
     full_scale = fields.get("overview_scale", full_scale)
     extent = overview_street_extent(full_center, full_scale, FORMATS[format_name])
-    rectangle(ground, "Ground", full_center, max(9000, full_scale), z, flat("Dark slate", "223742"))
+    rectangle(ground, "Ground", full_center, max(9000, full_scale), z, flat("Background ground", ground_color))
     if overview_bounds is not None:
-        add_polygon(ground, data, origin, "Estimated walkshed frontage", "355e56", z + 0.015)
+        add_polygon(ground, data, origin, "Estimated walkshed frontage",
+                    style.get("walkshed_color", "355e56"), z + 0.015,
+                    show_holes=config.get("walkshed_show_holes", True))
     paths = street_context_paths(directory, context, config.get("context_supplemental_lines", []), origin, extent)
     if paths:
-        ground_line(ground, "Street context", paths, "3f5560", 5, z + 0.05)
+        ground_line(ground, "Street context", paths, style.get("street_color", "3f5560"),
+                    style.get("street_width_m", 5), z + (.009 if municipalities else .05))
     if config.get("zoning"):
         zoning = group(stage, "Optional | City zoning")
         add_polygon(zoning, read(directory / config["zoning"]), origin,
@@ -172,7 +186,7 @@ def add_shot(scene, directory, config, format_name, mode):
         item.hide_render = True
         item.hide_viewport = True
     width = config.get("subject_width_m", 18)
-    ground_line(ground, subject_name, roads, "ffc866", width, z + 0.15)
+    corridor = ground_line(ground, subject_name, roads, style.get("corridor_color", "ffc866"), width, z + 0.15)
     rise = z + 0.23
     objects = create_massing(editable, read(directory / config["buildings"]), origin, rise,
                              config.get("floor_height_m", 3.2), config.get("fallback_height_m", 7),
@@ -191,6 +205,9 @@ def add_shot(scene, directory, config, format_name, mode):
     distance = config.get("distance", 2800)
     camera.data.clip_end = distance + 17000
     camera.data.passepartout_alpha = 0.95
+    if "subject_width_px" in config:
+        driver = scale_driver(corridor.data, "bevel_depth", camera, config["subject_width_px"] / 3840)
+        driver.driver.expression = f"max({width / 2:.9g}, {driver.driver.expression})"
     end = first + 138
     if prior_camera:
         # Preserve existing bound cameras and ensure the original starts the timeline.
@@ -232,6 +249,11 @@ def add_shot(scene, directory, config, format_name, mode):
         layout.add_route(("street context", number), [(path, [])], 0)
     if overview_bounds is not None:
         layout.add_route(("walkshed boundary", 1), [(ring, []) for ring in rings], 0)
+    if municipalities:
+        cities = group(ground, "Municipality labels")
+        keys = [(1, 0), (max(1, first - 1), 0), (first, 1), (first + 28, 1), (first + 42, 0)]
+        for name, center, color, size, placement in municipalities:
+            municipality_label(cities, name, center, color, size, keys, camera, z + .012, [layout], placement)
     side, title_x, title_y, _, heading = title_position(
         FORMATS[format_name], layout, config.get("overview_title", "Walking catchment"),
         previous=scene.get("geographic_title_corner", "LEFT"),
@@ -248,7 +270,7 @@ def add_shot(scene, directory, config, format_name, mode):
         width = min(len(credit_text) * 0.006, .89 if format_name == "landscape" else .5)
         box.from_pydata([(-.009,-.015,-.001),(width,-.015,-.001),
                          (width,.009,-.001),(-.009,.009,-.001)], [], [(0,1,2,3)])
-        box.materials.append(flat("Attribution background", "223742"))
+        box.materials.append(flat("Attribution background", ground_color))
         link(screen, "Attribution backing", box, (left, bottom, 0), anchor)
     if config.get("approved_caption"):
         value = read(directory / config["approved_caption"])

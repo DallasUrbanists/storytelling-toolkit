@@ -5,13 +5,14 @@ from pathlib import Path
 
 
 FORMATS = {"landscape": (1920, 1080), "portrait": (1080, 1920)}
-KINDS = {"boundary", "route", "callout", "station", "raster", "street_labels"}
+KINDS = {"boundary", "route", "callout", "station", "raster", "street_labels", "municipalities"}
 GEOMETRIES = {
     "boundary": {"Polygon", "MultiPolygon"},
     "route": {"LineString", "MultiLineString"},
     "street_labels": {"LineString", "MultiLineString"},
     "callout": {"Point"},
     "station": {"Point"},
+    "municipalities": {"Point", "Polygon", "MultiPolygon"},
 }
 
 
@@ -64,6 +65,31 @@ def positions(geometry):
         elif len(part) < 2:
             raise ValueError("LineStrings require at least two positions")
         yield from part
+
+
+def municipality_center(geometry, origin):
+    """Project a published center point, or find the full boundary's area centroid."""
+    if geometry["type"] == "Point":
+        return project(geometry["coordinates"], origin)
+    parts = geometry["coordinates"]
+    if geometry["type"] == "Polygon":
+        parts = [parts]
+    weight = x = y = 0.0
+    for polygon in parts:
+        for i, ring in enumerate(polygon):
+            points = [project(p, origin) for p in ring]
+            edges = list(zip(points, points[1:]))
+            cross = [a[0] * b[1] - b[0] * a[1] for a, b in edges]
+            area = sum(cross)
+            if abs(area) < 1e-9:
+                continue
+            signed = (1 if i == 0 else -1) * abs(area)
+            weight += signed
+            x += signed * sum((a[0] + b[0]) * k for (a, b), k in zip(edges, cross)) / (3 * area)
+            y += signed * sum((a[1] + b[1]) * k for (a, b), k in zip(edges, cross)) / (3 * area)
+    if weight <= 0:
+        raise ValueError("Municipality geometry needs a nonempty polygon")
+    return x / weight, y / weight
 
 
 def check_padding(value, name):
@@ -180,6 +206,8 @@ def read_story(path):
             value = layer.get(option, 0)
             if type(value) is not int or value < 0:
                 raise ValueError(f"{name}: {option} must be a nonnegative integer frame count")
+        if kind == "municipalities" and layer.get("placement", "center") not in ("center", "dynamic"):
+            raise ValueError(f"{name}: municipality placement must be 'center' or 'dynamic'")
         if "route_labels" in layer:
             if kind != "route":
                 raise ValueError(f"{name}: route_labels must be used on a route layer")
@@ -257,6 +285,12 @@ def read_story(path):
                 project(coordinate, config["origin"])
     for step in config["steps"]:
         visibility = step["layers"]
+        for layer in layers:
+            if layer["kind"] == "municipalities":
+                enabled = config.get("municipality_labels", True) and step.get("municipality_labels", True)
+                visibility.setdefault(layer["id"], 1)
+                if not enabled or not layer.get("labels", True):
+                    visibility[layer["id"]] = 0
         missing = (set(visibility) | set(step.get("focus", []))) - layer_ids
         if missing:
             raise ValueError(f"{step['title']}: unknown layers {sorted(missing)}")

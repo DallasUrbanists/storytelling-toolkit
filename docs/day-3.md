@@ -68,3 +68,14 @@ Validate both orientations using frames from the original geographic story, the 
 ### Street context for the walkshed shot
 
 Supply `context_lines` as a WGS 84 street network that extends beyond the entire overhead camera footprint in both formats. Add any wider source networks in `context_supplemental_lines` as a list of GeoJSON paths. The builder uses the walkshed camera center, authored scale and output aspect ratio to select street geometry with a small margin. Supply wider source data for larger overview scales. The camera target and walkshed scale are independent of the street network, and the normal map attribution should name every source used.
+
+### Match the preceding map
+
+The map builder carries the ground color and optional "map_style" settings
+into a geographic extension. Supply "street_color", "street_width_m", and
+"corridor_color" there when matching an established palette. The urban shot
+can override those values through its own "map_style". Set "subject_width_px"
+to match the corridor's overhead screen width at a 1920-pixel long edge. Its
+closer 2.5D view retains the physical width as a minimum. Set
+"walkshed_show_holes" to false to fill interior holes in the display geometry.
+That switch has no effect on the source walking catchment or its analysis.

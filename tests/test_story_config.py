@@ -133,5 +133,44 @@ class TitlePlacementTests(unittest.TestCase):
         self.assertEqual(title_corner(left, right), "RIGHT")
 
 
+class MunicipalityTests(unittest.TestCase):
+    def test_center_does_not_move_away_from_a_label_or_viewport(self):
+        from story_layout import Placement, municipality_offset
+
+        layout = Placement(((0, 0), 1000), FORMATS["portrait"])
+        self.assertEqual(municipality_offset([layout], (900, 900), .01, .01, "center"), (0, 0))
+
+    def test_full_boundary_centroid_subtracts_holes(self):
+        from story_config import municipality_center
+
+        geometry = {"type": "Polygon", "coordinates": [
+            [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]],
+            [[2, 1], [3, 1], [3, 3], [2, 3], [2, 1]],
+        ]}
+        x, y = municipality_center(geometry, (0, 0))
+        self.assertAlmostEqual(x / 111320, (16 * 2 - 2 * 2.5) / 14)
+        self.assertAlmostEqual(y / 111320, 2)
+
+    def test_defaults_on_with_per_shot_and_project_opt_out(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "city.geojson").write_text(json.dumps({
+                "type": "FeatureCollection", "features": [{
+                    "geometry": {"type": "Point", "coordinates": [0, 0]},
+                    "properties": {"name": "Test City"},
+                }]
+            }), encoding="utf-8")
+            file = directory / "story.json"
+            layer = {"id": "cities", "kind": "municipalities", "file": "city.geojson"}
+            steps = [{"hold": 5, "focus": ["cities"], "layers": {}},
+                     {"hold": 5, "focus": ["cities"], "layers": {}, "municipality_labels": False}]
+            story = {"origin": [0, 0], "layers": [layer], "steps": steps}
+            file.write_text(json.dumps(story), encoding="utf-8")
+            self.assertEqual([step["layers"]["cities"] for step in read_story(file)["steps"]], [1, 0])
+            story["municipality_labels"] = False
+            file.write_text(json.dumps(story), encoding="utf-8")
+            self.assertEqual([step["layers"]["cities"] for step in read_story(file)["steps"]], [0, 0])
+
+
 if __name__ == "__main__":
     unittest.main()
