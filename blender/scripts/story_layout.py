@@ -160,8 +160,7 @@ class Placement:
         width, height = (value / max(dimensions) for value in dimensions)
         self.frame = rect((0, 0), width - 0.038, height - 0.038)
         left, top = -width / 2, height / 2
-        self.boxes = [(left, top - 0.092, left + 0.36, top),
-                      (left, -top, left + 0.32, -top + 0.05)]
+        self.boxes = [(left, -top, left + 0.32, -top + 0.05)]
         self.leaders = []
         self.grid = defaultdict(list)
 
@@ -187,6 +186,19 @@ class Placement:
                     for cell in self.cells(extent):
                         self.grid[cell].append(segment)
 
+    def title_conflicts(self, box):
+        """Penalize semantic overlays more than background street texture."""
+        routes = {}
+        for cell in self.cells(box):
+            for name, a, b in self.grid.get(cell, ()):
+                if hits_rect(a, b, box):
+                    routes.setdefault(name, set()).add((a, b))
+        street_weight = sum(min(3, len(parts)) for name, parts in routes.items() if name[0] == "street context")
+        overlays = sum(1 for name in routes if name[0] != "street context")
+        return (30 * sum(overlap(box, other) for other in self.boxes)
+                + 12 * sum(hits_rect(*segment, box) for segment in self.leaders)
+                + 8 * overlays + street_weight)
+
     def score(self, box, leader=(), owner=None):
         penalty = 5000 * (not contained(box, self.frame))
         penalty += 600 * sum(overlap(box, other) for other in self.boxes)
@@ -210,6 +222,13 @@ class Placement:
             penalty += 55 * sum(crosses(*segment, *other) for other in self.leaders)
         return penalty
 
+
+
+def title_corner(left_score, right_score, previous="LEFT"):
+    """Use the preceding corner for effectively tied scores."""
+    if abs(left_score - right_score) <= 1:
+        return previous
+    return "LEFT" if left_score < right_score else "RIGHT"
 
 
 def place_callout(layouts, point, preferred, width, height):

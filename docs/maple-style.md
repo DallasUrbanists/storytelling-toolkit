@@ -25,3 +25,11 @@ Tag route layers with `"route_mode": "bus"` or `"route_mode": "rail"`. An explic
 ## Render straight to MP4
 
 In Blender 5.3, open Output Properties. Choose a filename and folder under Output, set Media Type to Video, and choose MPEG-4 and H.264 under Encoding. Leave File Extensions enabled. Check the frame range and frame rate, save the working project, then choose Render > Render Animation. Check the resulting MP4 in the selected folder. For an editable Resolve assembly, use the same render as an input clip.
+
+## Place geographic titles
+
+Map scenes and the walkshed share heading typography. Each stable shot compares
+top-left and top-right title boxes against visible routes, labels, and other
+map features available to that shot. A near tie keeps the preceding shot's
+corner. A tie on the opening shot picks the top left. Long headings wrap to the
+frame width. Subtitles are optional and move together with their headings.
