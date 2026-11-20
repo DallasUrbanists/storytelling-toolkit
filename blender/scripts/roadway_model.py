@@ -114,7 +114,7 @@ def validate_segments(segments, configurations):
             point = segment[endpoint]
             if point is None and segment["confidence"] == "illustrative":
                 continue
-            if len(point) != 2 or any(type(v) not in (int, float) for v in point):
+            if not isinstance(point, (list, tuple)) or len(point) != 2 or any(type(v) not in (int, float) for v in point):
                 raise ValueError(f"Use [longitude, latitude] for {label} {endpoint}")
             if not (-180 <= point[0] <= 180 and -90 <= point[1] <= 90):
                 raise ValueError(f"Invalid coordinate for {label} {endpoint}")
