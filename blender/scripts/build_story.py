@@ -10,7 +10,7 @@ from mathutils import Matrix, Vector
 from mathutils.geometry import delaunay_2d_cdt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from story_layout import Placement, parallel_routes, place_callout, rect, samples, split_trace
+from story_layout import Placement, parallel_routes, place_callout, rect, samples, split_trace, title_corner
 from story_config import (
     FORMATS, badge_keys, bounds, frame_target, layer_events, positions,
     project, read_story, route_opacity_keys, route_starts, schedule,
@@ -583,7 +583,49 @@ def animate_camera(camera, steps, timings, frames, height, scene):
             camera.data.keyframe_insert(data_path="ortho_scale", frame=frame)
 
 
-def title_cards(scene, camera, steps, timings, dimensions, metadata):
+TITLE_SIZE = .034
+SUBTITLE_SIZE = .014
+TITLE_COLOR = "f2faf9"
+SUBTITLE_COLOR = "b0c6ca"
+
+
+def wrap_title(value, size, limit):
+    lines = []
+    for paragraph in value.splitlines() or [""]:
+        line = ""
+        for word in paragraph.split():
+            candidate = f"{line} {word}".strip()
+            left, right = glyph_bounds(candidate, size)
+            if line and right - left > limit:
+                lines.append(line)
+                line = word
+            else:
+                line = candidate
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def title_position(dimensions, layout, title, subtitle="", previous="LEFT"):
+    width, height = (value / max(dimensions) for value in dimensions)
+    margin = .033
+    top = height / 2 - .045
+    title = wrap_title(title, TITLE_SIZE, width - 2 * margin - .010)
+    title_lines = title.splitlines()
+    subtitle_y = top - .032 - max(0, len(title_lines) - 1) * TITLE_SIZE
+    widths = [right - left for left, right in (glyph_bounds(line, TITLE_SIZE) for line in title_lines)]
+    if subtitle:
+        left, right = glyph_bounds(subtitle, SUBTITLE_SIZE)
+        widths.append(right - left)
+    span = max(widths, default=0) + .014
+    bottom = (subtitle_y if subtitle else subtitle_y + .032) - .010
+    left, right = -width / 2 + margin, width / 2 - margin
+    left_box = (left - .007, bottom, left + span, top + TITLE_SIZE)
+    right_box = (right - span, bottom, right + .007, top + TITLE_SIZE)
+    side = title_corner(layout.title_conflicts(left_box), layout.title_conflicts(right_box), previous)
+    return side, (left if side == "LEFT" else right), top, subtitle_y, title
+
+
+def title_cards(scene, camera, steps, timings, dimensions, metadata, layouts):
     collection = bpy.data.collections.new("Screen titles")
     scene.collection.children.link(collection)
     anchor = link(collection, "Screen coordinates", at=(0, 0, -50), parent=camera)
@@ -591,23 +633,27 @@ def title_cards(scene, camera, steps, timings, dimensions, metadata):
         scale_driver(anchor, "scale", camera, 1, axis)
     width, height = (value / max(dimensions) for value in dimensions)
     left, top = -width / 2 + 0.033, height / 2 - 0.045
-    for step, (_, arrival, end) in zip(steps, timings):
+    side = "LEFT"
+    for step, (_, arrival, end), layout in zip(steps, timings, layouts):
         name = step["title"]
+        side, x, y, subtitle_y, value = title_position(dimensions, layout, name, step.get("subtitle", ""), side)
+        print(f"Title {name}: {side}", flush=True)
         keys = ({1: 1} if arrival == 1 else
                 {1: 0, arrival - 1: 0, arrival + min(8, (end - arrival) // 3): 1})
         if end < timings[-1][2]:
             keys[max(arrival, end - min(9, (end - arrival) // 3))] = 1
             keys[end] = 0
-        title = material(name + " | Heading", "f2faf9", sorted(keys.items()))
-        caption(collection, name, name, title, 0.034, (left, top, 2), anchor)
+        title = material(name + " | Heading", TITLE_COLOR, sorted(keys.items()))
+        caption(collection, name, value, title, TITLE_SIZE, (x, y, 2), anchor, side)
         if step.get("subtitle"):
-            subtitle = material(name + " | Context", "b0c6ca", sorted(keys.items()))
-            caption(collection, name + " | Context", step["subtitle"], subtitle, 0.014,
-                    (left, top - 0.032, 2), anchor)
+            subtitle = material(name + " | Context", SUBTITLE_COLOR, sorted(keys.items()))
+            caption(collection, name + " | Context", step["subtitle"], subtitle, SUBTITLE_SIZE,
+                    (x, subtitle_y, 2), anchor, side)
         if step.get("note"):
             note = material(name + " | Map note", step.get("note_color", "c6d9df"), sorted(keys.items()))
             caption(collection, name + " | Map note", step["note"], note, 0.012,
                     (left, -height / 2 + 0.041, 2), anchor)
+    scene["geographic_title_corner"] = side
     if metadata.get("credit"):
         footer = material("Sources", "adc4cd", [(1, 1)])
         caption(collection, "Map sources", metadata["credit"], footer, 0.0105,
@@ -711,7 +757,7 @@ def build(config, format_name):
         add_layer(collection, layer, keys, draws, config, stacking[name], camera, format_name, mask_bounds,
                   active_layouts or layouts[:1], packed.get(name), scale, scene.frame_end, pending)
     place_route_badges(pending, camera, max(stacking.values()) + 320)
-    title_cards(scene, camera, steps, timings, dimensions, config)
+    title_cards(scene, camera, steps, timings, dimensions, config, layouts)
     for screen in bpy.data.screens:
         for area in screen.areas:
             if area.type == "VIEW_3D":
