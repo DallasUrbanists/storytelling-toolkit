@@ -66,6 +66,7 @@ def scale_driver(block, path, camera, factor, index=None):
     var.targets[0].id = camera.data
     var.targets[0].data_path = "ortho_scale"
     driver.expression = f"ortho_scale * {factor:.9g}"
+    return curve
 
 
 def link(collection, name, data=None, at=(0, 0, 0), parent=None):
@@ -816,6 +817,10 @@ def build(config, format_name):
         add_layer(collection, layer, keys, draws, config, stacking[name], camera, format_name, mask_bounds,
                   active_layouts or layouts[:1], packed.get(name), scale, scene.frame_end, pending)
     place_route_badges(pending, camera, max(stacking.values()) + 320)
+    scene["geographic_style_json"] = json.dumps({
+        "ground_color": config.get("background", "14222e"),
+        **config.get("map_style", {}),
+    })
     scene["municipality_labels_json"] = json.dumps([
         entry for layer in layers.values()
         if layer["kind"] == "municipalities" and layer.get("labels", True) and config.get("municipality_labels", True)
