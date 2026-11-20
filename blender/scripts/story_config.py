@@ -5,10 +5,11 @@ from pathlib import Path
 
 
 FORMATS = {"landscape": (1920, 1080), "portrait": (1080, 1920)}
-KINDS = {"boundary", "route", "callout", "station", "raster"}
+KINDS = {"boundary", "route", "callout", "station", "raster", "street_labels"}
 GEOMETRIES = {
     "boundary": {"Polygon", "MultiPolygon"},
     "route": {"LineString", "MultiLineString"},
+    "street_labels": {"LineString", "MultiLineString"},
     "callout": {"Point"},
     "station": {"Point"},
 }
@@ -65,6 +66,23 @@ def positions(geometry):
         yield from part
 
 
+def check_route_labels(options, name):
+    if not isinstance(options, dict):
+        raise ValueError(f"{name}: route label settings must be an object")
+    if type(options.get("duration", 64)) is not int or options.get("duration", 64) < 1:
+        raise ValueError(f"{name}: route label duration must be a positive number of frames")
+    size = options.get("size", 0.013)
+    if type(size) not in (int, float) or not 0 < size < 1:
+        raise ValueError(f"{name}: route label size must be a positive fraction")
+    windows = options.get("windows", [])
+    if not isinstance(windows, list):
+        raise ValueError(f"{name}: route label windows must be a list")
+    for pair in windows:
+        if (not isinstance(pair, list) or len(pair) != 2
+                or any(type(value) is not int for value in pair) or not 1 <= pair[0] <= pair[1]):
+            raise ValueError(f"{name}: each route label window must be two increasing positive frames")
+
+
 def read_story(path):
     path = Path(path)
     config = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -82,6 +100,19 @@ def read_story(path):
             value = layer.get(option, 0)
             if type(value) is not int or value < 0:
                 raise ValueError(f"{name}: {option} must be a nonnegative integer frame count")
+        if "route_labels" in layer:
+            if kind != "route":
+                raise ValueError(f"{name}: route_labels must be used on a route layer")
+            check_route_labels(layer["route_labels"], name)
+        for option in ("show_holes", "label_backing", "auto_place"):
+            if option in layer and type(layer[option]) is not bool:
+                raise ValueError(f"{name}: {option} must be true or false")
+        if "interline" in layer:
+            interline = layer["interline"]
+            if kind != "route" or not isinstance(interline, dict) or any(
+                    type(value) not in (int, float) or not 0 < value < float("inf")
+                    for value in interline.values()):
+                raise ValueError(f"{name}: interline settings must be positive numbers on a route layer")
         layer["path"] = (path.parent / layer["file"]).resolve()
         if kind == "raster":
             if not layer["path"].is_file():
@@ -102,6 +133,9 @@ def read_story(path):
             raise ValueError(f"{name}: no selected features")
         for feature in layer["features"]:
             geometry = feature["geometry"]
+            properties = feature.get("properties", {})
+            if kind == "route" and "route_label_timing" in properties:
+                check_route_labels(properties["route_label_timing"], name)
             if geometry["type"] not in GEOMETRIES[kind]:
                 raise ValueError(f"{name}: {geometry['type']} is unsupported for {kind}")
             for coordinate in positions(geometry):
@@ -153,3 +187,31 @@ def layer_events(layer, steps, timings):
             draws.append((begin, min(begin + layer["trace"], end)))
         current = target
     return sorted(keys.items()), draws
+
+
+def route_starts(keys, draws):
+    if draws:
+        return [begin for begin, _ in draws]
+    starts = [previous + 1 for (previous, opacity), (_, target) in zip(keys, keys[1:]) if opacity == 0 < target]
+    return ([keys[0][0]] if keys[0][1] else []) + starts
+
+
+def badge_keys(options, starts, end):
+    windows = options.get("windows")
+    if windows is None:
+        duration = options.get("duration", 64)
+        windows = [(first, first + duration - 1) for first in starts]
+    return {frame: int(any(first <= frame <= last for first, last in windows))
+            for frame in sorted({1, *(first for first, _ in windows if first <= end),
+                                *(last + 1 for _, last in windows if last < end)})}
+
+
+def route_opacity_keys(keys, draws):
+    if not draws:
+        return keys
+    reveal = dict(keys)
+    for begin, end in draws:
+        if begin < end:
+            target = next((value for frame, value in keys if frame >= begin and value > 0), 0)
+            reveal[begin] = max(reveal.get(begin, 0), target * 0.62)
+    return sorted(reveal.items())
